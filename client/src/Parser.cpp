@@ -33,7 +33,7 @@ void Parser::parseCommand(const std::string &input)
         std::cerr << "Invalid command: '" << args.front() << '\n';
         return;
     } else if (args.size() < it->second.second) {
-        std::cerr << "Error: command '" << it->first
+        std::cerr << "Command '" << it->first
                   << "' requires " << it->second.second - 1 << "arguments\n";
         return;
     }

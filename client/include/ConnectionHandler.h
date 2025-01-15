@@ -7,15 +7,8 @@
 
 class ConnectionHandler
 {
-private:
-	const std::string host;
-	const short port;
-	boost::asio::io_service io_service;   // Provides core I/O functionality
-	boost::asio::ip::tcp::socket socket;
-
 public:
 	ConnectionHandler(std::string host, short port);
-
 	~ConnectionHandler();
 
 	// Connect to the remote machine
@@ -47,5 +40,11 @@ public:
 
 	// Close down the connection properly.
 	void close();
+
+private:
+	const std::string host_;
+	const short port_;
+	boost::asio::io_service ioService_;   // Provides core I/O functionality
+	boost::asio::ip::tcp::socket socket_;
 
 }; //class ConnectionHandler

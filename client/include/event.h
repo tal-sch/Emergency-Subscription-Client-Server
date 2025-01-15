@@ -22,13 +22,13 @@ public:
     const std::map<std::string, std::string> &get_general_information() const;
     
 private:
-    std::string channel_name; // name of channel
-    std::string city; // city of the event 
-    std::string name; // name of the event
-    int datetime; // time of the event in seconds
-    std::string description; // description of the event
-    std::map<std::string, std::string> general_info; // map of all the general information
-    std::string event_owner;
+    std::string channelName_; // name of channel
+    std::string city_; // city of the event 
+    std::string name_; // name of the event
+    int datetime_; // time of the event in seconds
+    std::string description_; // description of the event
+    std::map<std::string, std::string> generalInfo_; // map of all the general information
+    std::string eventOwner_;
 
     static std::unordered_map<std::string, std::string> parseFrameBody(const std::string& frameBody);
     static std::map<std::string, std::string> parseGeneralInfo(const std::string& info);

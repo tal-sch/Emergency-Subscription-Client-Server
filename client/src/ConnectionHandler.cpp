@@ -4,10 +4,10 @@ using boost::asio::ip::tcp;
 
 
 ConnectionHandler::ConnectionHandler(std::string host, short port)
-	: host(host)
-	, port(port)
-	, io_service()
-	, socket(io_service)
+	: host_(host)
+	, port_(port)
+	, ioService_()
+	, socket_(ioService_)
 {
 
 }
@@ -20,14 +20,14 @@ ConnectionHandler::~ConnectionHandler()
 bool ConnectionHandler::connect()
 {
 	std::cout << "Connecting to "
-	          << host << ":" << port << '\n';
+	          << host_ << ":" << port_ << '\n';
 
 	tcp::endpoint endpoint(
-		boost::asio::ip::address::from_string(host),
-		port); // the server endpoint
+		boost::asio::ip::address::from_string(host_),
+		port_); // the server endpoint
 
 	boost::system::error_code error;
-	socket.connect(endpoint, error);
+	socket_.connect(endpoint, error);
 	
 	if (error) {
 		std::cerr << "Connection failed (Error: " << error.message() << ")\n";
@@ -43,7 +43,7 @@ bool ConnectionHandler::getBytes(char bytes[], unsigned int bytesToRead)
 	boost::system::error_code error;
 
 	while (!error && bytesToRead > tmp) {
-		tmp += socket.read_some(
+		tmp += socket_.read_some(
 			boost::asio::buffer(bytes + tmp, bytesToRead - tmp),
 			error
 		);
@@ -63,7 +63,7 @@ bool ConnectionHandler::sendBytes(const char bytes[], int bytesToWrite)
 	boost::system::error_code error;
 
 	while (!error && bytesToWrite > tmp) {
-		tmp += socket.write_some(
+		tmp += socket_.write_some(
 			boost::asio::buffer(bytes + tmp, bytesToWrite - tmp),
 			error
 		);
@@ -117,7 +117,7 @@ bool ConnectionHandler::sendFrameAscii(const std::string &frame, char delimiter)
 void ConnectionHandler::close()
 {
 	try {
-		socket.close();
+		socket_.close();
 	} catch (...) {
 		std::cout << "closing failed: connection already closed" << std::endl;
 	}
