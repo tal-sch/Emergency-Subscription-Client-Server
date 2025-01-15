@@ -24,23 +24,21 @@ Event::Event(std::string channel_name,
     : channel_name(channel_name)
     , city(city)
     , name(name)
-    , date_time(date_time)
+    , datetime(date_time)
     , description(description)
-    , general_information(general_information)
-    , eventOwnerUser("")
+    , general_info(general_information)
+    , event_owner("")
 {
 }
 
-Event::~Event()
+void Event::setEventOwnerUser(std::string setEventOwnerUser)
 {
+    event_owner = setEventOwnerUser;
 }
 
-void Event::setEventOwnerUser(std::string setEventOwnerUser) {
-    eventOwnerUser = setEventOwnerUser;
-}
-
-const std::string &Event::getEventOwnerUser() const {
-    return eventOwnerUser;
+const std::string &Event::getEventOwnerUser() const
+{
+    return event_owner;
 }
 
 const std::string &Event::get_channel_name() const
@@ -60,12 +58,67 @@ const std::string &Event::get_name() const
 
 int Event::get_date_time() const
 {
-    return date_time;
+    return datetime;
 }
 
 const std::map<std::string, std::string> &Event::get_general_information() const
 {
-    return general_information;
+    return general_info;
+}
+
+std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::string &frameBody)
+{
+    std::istringstream stream(frameBody);
+    std::string line;
+    std::unordered_map<std::string, std::string> data;
+
+
+    while (std::getline(stream, line)) {
+        size_t colonPos = line.find(':');
+
+        if (colonPos != std::string::npos) {
+            std::string key = line.substr(0, colonPos);
+
+            if (key == "general information") {
+                std::string generalInfo;
+                
+                while (isspace(stream.peek())) {
+                    std::getline(stream, line);
+                    generalInfo.append(line.substr(1) + '\n');
+                }
+
+                data[key] = generalInfo;
+                continue;
+            }
+
+            if (key == "description") {
+                std::string description;
+                while (std::getline(stream, line)) description.append(line + '\n');
+                data[key] = description;
+                break;
+            }
+
+            data[key] = line.substr(colonPos + 2);
+        }
+    }
+
+    return data;
+}
+
+std::map<std::string, std::string> Event::parseGeneralInfo(const std::string &info)
+{
+    std::istringstream stream(info);
+    std::string line;
+    std::map<std::string, std::string> data;
+
+    while (std::getline(stream, line)) {
+        size_t colonPos = line.find(':');
+
+        if (colonPos != std::string::npos)
+            data[line.substr(0, colonPos)] = line.substr(colonPos + 2);
+    }
+
+    return data;
 }
 
 const std::string &Event::get_description() const
@@ -74,61 +127,25 @@ const std::string &Event::get_description() const
 }
 
 Event::Event(const std::string &frame_body)
-    : channel_name("")
-    , city("")
-    , name("")
-    , date_time(0)
-    , description("")
-    , general_information()
-    , eventOwnerUser("")                        
+    : channel_name()
+    , city()
+    , name()
+    , datetime(0)
+    , description()
+    , general_info()
+    , event_owner()                        
                                             
 {
-    std::stringstream ss(frame_body);
-    std::string line;
-    std::string eventDescription;
-    std::map<std::string, std::string> general_information_from_string;
-    bool inGeneralInformation = false;
+    std::unordered_map<std::string, std::string> data = parseFrameBody(frame_body);
+    std::unordered_map<std::string, std::string>::iterator it;
 
-    while (getline(ss,line,'\n')) {
-        if (line.find(':') != std::string::npos) {
-            std::vector<std::string> lineArgs = Utils::split_str(line, ':');
-            std::string key = lineArgs.at(0);
-            std::string val;
-            if (lineArgs.size() == 2) {
-                val = lineArgs.at(1);
-            }
-            if (key == "user") {
-                eventOwnerUser = val;
-            }
-            if (key == "channel name") {
-                channel_name = val;
-            }
-            if (key == "city") {
-                city = val;
-            }
-            else if (key == "event name") {
-                name = val;
-            }
-            else if (key == "date time") {
-                date_time = std::stoi(val);
-            }
-            else if (key == "general information") {
-                inGeneralInformation = true;
-                continue;
-            }
-            else if (key == "description") {
-                while (getline(ss,line,'\n')) {
-                    eventDescription += line + "\n";
-                }
-                description = eventDescription;
-            }
-
-            if (inGeneralInformation) {
-                general_information_from_string[key.substr(1)] = val;
-            }
-        }
-    }
-    general_information = general_information_from_string;
+    if ((it = data.find("user")) != data.end()) event_owner = it->second;
+    if ((it = data.find("channel name")) != data.end()) channel_name = it->second;
+    if ((it = data.find("city")) != data.end()) city = it->second;
+    if ((it = data.find("event name")) != data.end()) name = it->second;
+    if ((it = data.find("date time")) != data.end()) datetime = std::stoi(it->second);
+    if ((it = data.find("general information")) != data.end()) general_info = parseGeneralInfo(it->second);
+    if ((it = data.find("description")) != data.end()) description = it->second;
 }
 
 names_and_events parseEventsFile(std::string json_path)
@@ -137,9 +154,8 @@ names_and_events parseEventsFile(std::string json_path)
     json data = json::parse(f);
 
     std::string channel_name = data["channel_name"];
-
-    // run over all the events and convert them to Event objects
     std::vector<Event> events;
+    
     for (auto &event : data["events"]) {
         std::string name = event["event_name"];
         std::string city = event["city"];
@@ -162,9 +178,7 @@ names_and_events parseEventsFile(std::string json_path)
             description,
             general_information
         );
-    
     }
 
-    names_and_events events_and_names{channel_name, events};
-    return events_and_names;
+    return {channel_name, events};
 }

@@ -8,15 +8,15 @@
 class ConnectionHandler
 {
 private:
-	const std::string _host;
-	const short _port;
-	boost::asio::io_service _io_service;   // Provides core I/O functionality
-	boost::asio::ip::tcp::socket _socket;
+	const std::string host;
+	const short port;
+	boost::asio::io_service io_service;   // Provides core I/O functionality
+	boost::asio::ip::tcp::socket socket;
 
 public:
 	ConnectionHandler(std::string host, short port);
 
-	virtual ~ConnectionHandler();
+	~ConnectionHandler();
 
 	// Connect to the remote machine
 	bool connect();

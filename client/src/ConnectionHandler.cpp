@@ -4,13 +4,13 @@ using boost::asio::ip::tcp;
 
 
 ConnectionHandler::ConnectionHandler(std::string host, short port)
-	: _host(host)
-	, _port(port)
-	, _io_service()
-	, _socket(_io_service)
+	: host(host)
+	, port(port)
+	, io_service()
+	, socket(io_service)
 {
 
-}                                                
+}
 
 ConnectionHandler::~ConnectionHandler()
 {
@@ -19,19 +19,21 @@ ConnectionHandler::~ConnectionHandler()
 
 bool ConnectionHandler::connect()
 {
-	std::cout << "Starting connect to "
-	          << _host << ":" << _port << std::endl;
-	try {
-		tcp::endpoint endpoint(boost::asio::ip::address::from_string(_host), _port); // the server endpoint
-		boost::system::error_code error;
-		_socket.connect(endpoint, error);
-		if (error)
-			throw boost::system::system_error(error);
-	}
-	catch (std::exception &e) {
-		std::cerr << "Connection failed (Error: " << e.what() << ')' << std::endl;
+	std::cout << "Connecting to "
+	          << host << ":" << port << '\n';
+
+	tcp::endpoint endpoint(
+		boost::asio::ip::address::from_string(host),
+		port); // the server endpoint
+
+	boost::system::error_code error;
+	socket.connect(endpoint, error);
+	
+	if (error) {
+		std::cerr << "Connection failed (Error: " << error.message() << ")\n";
 		return false;
 	}
+
 	return true;
 }
 
@@ -39,16 +41,19 @@ bool ConnectionHandler::getBytes(char bytes[], unsigned int bytesToRead)
 {
 	size_t tmp = 0;
 	boost::system::error_code error;
-	try {
-		while (!error && bytesToRead > tmp) {
-			tmp += _socket.read_some(boost::asio::buffer(bytes + tmp, bytesToRead - tmp), error);
-		}
-		if (error)
-			throw boost::system::system_error(error);
-	} catch (std::exception &e) {
-		std::cerr << "recv failed (Error: " << e.what() << ')' << std::endl;
+
+	while (!error && bytesToRead > tmp) {
+		tmp += socket.read_some(
+			boost::asio::buffer(bytes + tmp, bytesToRead - tmp),
+			error
+		);
+	}
+	
+	if (error) {
+		std::cerr << "recv failed (Error: " << error.message() << ")\n";
 		return false;
 	}
+	
 	return true;
 }
 
@@ -56,16 +61,19 @@ bool ConnectionHandler::sendBytes(const char bytes[], int bytesToWrite)
 {
 	int tmp = 0;
 	boost::system::error_code error;
-	try {
-		while (!error && bytesToWrite > tmp) {
-			tmp += _socket.write_some(boost::asio::buffer(bytes + tmp, bytesToWrite - tmp), error);
-		}
-		if (error)
-			throw boost::system::system_error(error);
-	} catch (std::exception &e) {
-		std::cerr << "recv failed (Error: " << e.what() << ')' << std::endl;
+
+	while (!error && bytesToWrite > tmp) {
+		tmp += socket.write_some(
+			boost::asio::buffer(bytes + tmp, bytesToWrite - tmp),
+			error
+		);
+	}
+
+	if (error) {
+		std::cerr << "recv failed (Error: " << error.message() << ")\n";
 		return false;
 	}
+
 	return true;
 }
 
@@ -87,16 +95,14 @@ bool ConnectionHandler::getFrameAscii(std::string &frame, char delimiter)
 	// Notice that the null character is not appended to the frame string.
 	try {
 		do {
-			if (!getBytes(&ch, 1)) {
-				return false;
-			}
-			if (ch != '\0')
-				frame.append(1, ch);
+			if (!getBytes(&ch, 1)) return false;
+			if (ch != '\0') frame.append(1, ch);
 		} while (delimiter != ch);
 	} catch (std::exception &e) {
-		std::cerr << "recv failed2 (Error: " << e.what() << ')' << std::endl;
+		std::cerr << "recv failed2 (Error: " << e.what() << ")\n";
 		return false;
 	}
+
 	return true;
 }
 
@@ -111,7 +117,7 @@ bool ConnectionHandler::sendFrameAscii(const std::string &frame, char delimiter)
 void ConnectionHandler::close()
 {
 	try {
-		_socket.close();
+		socket.close();
 	} catch (...) {
 		std::cout << "closing failed: connection already closed" << std::endl;
 	}
