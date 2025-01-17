@@ -36,7 +36,7 @@ private:
 
 // an object that holds the names of the teams and a vector of events, to be returned by the parseEventsFile function
 struct names_and_events {
-    std::string channel_name;
+    std::string channelName;
     std::vector<Event> events;
 };
 
