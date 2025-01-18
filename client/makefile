@@ -3,8 +3,11 @@ LDFLAGS := -lboost_system -lpthread
 
 all: StompEMIClient
 
-StompEMIClient: bin/ConnectionHandler.o bin/StompClient.o bin/event.o
+StompEMIClient: bin bin/ConnectionHandler.o bin/StompClient.o bin/event.o
 	g++ -o bin/StompEMIClient bin/ConnectionHandler.o bin/StompClient.o $(LDFLAGS)
+
+bin:
+	mkdir bin
 
 bin/ConnectionHandler.o: src/ConnectionHandler.cpp
 	g++ $(CFLAGS) -o bin/ConnectionHandler.o src/ConnectionHandler.cpp
@@ -20,4 +23,4 @@ clean:
 	rm -f bin/*
 
 run:
-	./bin/StompClient
+	./bin/StompEMIClient
