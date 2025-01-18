@@ -21,49 +21,49 @@ Event::Event(std::string channel_name,
              std::string description,
              std::map<std::string,
              std::string> general_information)
-    : channelName_(channel_name)
-    , city_(city)
-    , name_(name)
-    , datetime_(date_time)
-    , description_(description)
-    , generalInfo_(general_information)
-    , eventOwner_("")
+    : _channelName(channel_name)
+    , _city(city)
+    , _name(name)
+    , _datetime(date_time)
+    , _description(description)
+    , _generalInfo(general_information)
+    , _eventOwner()
 {
 }
 
 void Event::setEventOwnerUser(std::string setEventOwnerUser)
 {
-    eventOwner_ = setEventOwnerUser;
+    _eventOwner = setEventOwnerUser;
 }
 
 const std::string &Event::getEventOwnerUser() const
 {
-    return eventOwner_;
+    return _eventOwner;
 }
 
 const std::string &Event::get_channel_name() const
 {
-    return channelName_;
+    return _channelName;
 }
 
 const std::string &Event::get_city() const
 {
-    return city_;
+    return _city;
 }
 
 const std::string &Event::get_name() const
 {
-    return name_;
+    return _name;
 }
 
 int Event::get_date_time() const
 {
-    return datetime_;
+    return _datetime;
 }
 
 const std::map<std::string, std::string> &Event::get_general_information() const
 {
-    return generalInfo_;
+    return _generalInfo;
 }
 
 std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::string &frameBody)
@@ -123,29 +123,29 @@ std::map<std::string, std::string> Event::parseGeneralInfo(const std::string &in
 
 const std::string &Event::get_description() const
 {
-    return description_;
+    return _description;
 }
 
 Event::Event(const std::string &frame_body)
-    : channelName_()
-    , city_()
-    , name_()
-    , datetime_(0)
-    , description_()
-    , generalInfo_()
-    , eventOwner_()                        
+    : _channelName()
+    , _city()
+    , _name()
+    , _datetime(0)
+    , _description()
+    , _generalInfo()
+    , _eventOwner()                        
                                             
 {
     std::unordered_map<std::string, std::string> data = parseFrameBody(frame_body);
     std::unordered_map<std::string, std::string>::iterator it;
 
-    if ((it = data.find("user")) != data.end()) eventOwner_ = it->second;
-    if ((it = data.find("channel name")) != data.end()) channelName_ = it->second;
-    if ((it = data.find("city")) != data.end()) city_ = it->second;
-    if ((it = data.find("event name")) != data.end()) name_ = it->second;
-    if ((it = data.find("date time")) != data.end()) datetime_ = std::stoi(it->second);
-    if ((it = data.find("general information")) != data.end()) generalInfo_ = parseGeneralInfo(it->second);
-    if ((it = data.find("description")) != data.end()) description_ = it->second;
+    if ((it = data.find("user")) != data.end()) _eventOwner = it->second;
+    if ((it = data.find("channel name")) != data.end()) _channelName = it->second;
+    if ((it = data.find("city")) != data.end()) _city = it->second;
+    if ((it = data.find("event name")) != data.end()) _name = it->second;
+    if ((it = data.find("date time")) != data.end()) _datetime = std::stoi(it->second);
+    if ((it = data.find("general information")) != data.end()) _generalInfo = parseGeneralInfo(it->second);
+    if ((it = data.find("description")) != data.end()) _description = it->second;
 }
 
 names_and_events parseEventsFile(std::string json_path)

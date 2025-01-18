@@ -34,14 +34,14 @@ public:
         const std::string& body() const;
 
     private:
-        FrameType type_;
-        std::unordered_map<std::string, std::string> headers_;
-        std::string body_;
+        FrameType _type;
+        std::unordered_map<std::string, std::string> _headers;
+        std::string _body;
     };
 
     StompProtocol(ConnectionHandler& connection);
 
 private:
-    ConnectionHandler& connection_;
-    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> data_;
+    ConnectionHandler& _connection;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
 };
