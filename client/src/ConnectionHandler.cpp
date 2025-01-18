@@ -38,12 +38,12 @@ bool ConnectionHandler::connect()
 
 bool ConnectionHandler::getBytes(char bytes[], unsigned int bytesToRead)
 {
-	size_t tmp = 0;
+	size_t bytesRead = 0;
 	boost::system::error_code error;
 
-	while (!error && bytesToRead > tmp) {
-		tmp += _socket.read_some(
-			boost::asio::buffer(bytes + tmp, bytesToRead - tmp),
+	while (!error && bytesToRead > bytesRead) {
+		bytesRead += _socket.read_some(
+			boost::asio::buffer(bytes + bytesRead, bytesToRead - bytesRead),
 			error
 		);
 	}
@@ -56,14 +56,14 @@ bool ConnectionHandler::getBytes(char bytes[], unsigned int bytesToRead)
 	return true;
 }
 
-bool ConnectionHandler::sendBytes(const char bytes[], int bytesToWrite)
+bool ConnectionHandler::sendBytes(const char bytes[], unsigned int bytesToWrite)
 {
-	int tmp = 0;
+	size_t bytesWritten = 0;
 	boost::system::error_code error;
 
-	while (!error && bytesToWrite > tmp) {
-		tmp += _socket.write_some(
-			boost::asio::buffer(bytes + tmp, bytesToWrite - tmp),
+	while (!error && bytesToWrite > bytesWritten) {
+		bytesWritten += _socket.write_some(
+			boost::asio::buffer(bytes + bytesWritten, bytesToWrite - bytesWritten),
 			error
 		);
 	}
@@ -115,9 +115,7 @@ bool ConnectionHandler::sendFrameAscii(const std::string &frame, char delimiter)
 // Close down the connection properly.
 void ConnectionHandler::close()
 {
-	try {
-		_socket.close();
-	} catch (...) {
-		std::cout << "closing failed: connection already closed" << std::endl;
-	}
+	boost::system::error_code error;
+	_socket.close(error);
+	if (error) std::cerr << "Error while closing socket: " << error.message() << '\n';
 }
