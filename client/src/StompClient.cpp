@@ -9,7 +9,7 @@ int main()
 {
     StompProtocol p;
 
-    while (!p.exit()) {
+    while (!Parser::quitApp()) {
         std::string line;
         std::getline(std::cin, line);
         Parser::parseCommand(line, p);

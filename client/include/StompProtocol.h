@@ -43,10 +43,8 @@ class StompProtocol
 public:
     StompProtocol();
     bool isLoggedIn() const;
-    bool exit() const;
 
 private:
     std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
-    bool _exitApp;
 };

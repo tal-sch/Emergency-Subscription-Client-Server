@@ -8,8 +8,15 @@
 
 using Command = void (*)(const std::vector<std::string>&, StompProtocol&);
 
+bool Parser::_sQuit = false;
 
-void Parser::parseCommand(const std::string &input, StompProtocol& protocol)
+
+bool Parser::quitApp()
+{
+    return _sQuit;
+}
+
+void Parser::parseCommand(const std::string &input, StompProtocol &protocol)
 {
     if (input.empty())
         return;
@@ -21,7 +28,8 @@ void Parser::parseCommand(const std::string &input, StompProtocol& protocol)
         {"exit", {Parser::exit, 2}},
         {"report", {Parser::report, 2}},
         {"summary", {Parser::summary, 4}},
-        {"logout", {Parser::logout, 1}}
+        {"logout", {Parser::logout, 1}},
+        {"quit", {Parser::quit, 1}}
     };
 
     std::vector<std::string> args = Utils::parseArgs(input);
@@ -67,4 +75,9 @@ void Parser::summary(const std::vector<std::string>& args, StompProtocol& protoc
 
 void Parser::logout(const std::vector<std::string>& args, StompProtocol& protocol)
 {
+}
+
+void Parser::quit(const std::vector<std::string> &, StompProtocol &)
+{
+    _sQuit = true;
 }
