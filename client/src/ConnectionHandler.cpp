@@ -69,7 +69,7 @@ bool ConnectionHandler::sendBytes(const char bytes[], unsigned int bytesToWrite)
 	}
 
 	if (error) {
-		std::cerr << "recv failed (Error: " << error.message() << ")\n";
+		std::cerr << "send failed (Error: " << error.message() << ")\n";
 		return false;
 	}
 
@@ -90,17 +90,11 @@ bool ConnectionHandler::sendLine(std::string &line)
 bool ConnectionHandler::getFrameAscii(std::string &frame, char delimiter)
 {
 	char ch;
-	// Stop when we encounter the null character.
-	// Notice that the null character is not appended to the frame string.
-	try {
-		do {
-			if (!getBytes(&ch, 1)) return false;
-			if (ch != '\0') frame.append(1, ch);
-		} while (delimiter != ch);
-	} catch (std::exception &e) {
-		std::cerr << "recv failed2 (Error: " << e.what() << ")\n";
-		return false;
-	}
+
+	do {
+		if (!getBytes(&ch, 1)) return false;
+		if (ch != '\0') frame.append(1, ch);
+	} while (ch != '\0' && ch != delimiter);
 
 	return true;
 }

@@ -30,12 +30,13 @@ public:
     const std::string& getHeader(const std::string& header) const;
     const std::string& body() const;
 
+    std::string toString() const;
+    static Frame parseFrame(char bytes[]);
+    
 private:
     FrameType _type;
     std::unordered_map<std::string, std::string> _headers;
     std::string _body;
-
-    static Frame parseFrame(char bytes[]);
 };
 
 class StompProtocol
