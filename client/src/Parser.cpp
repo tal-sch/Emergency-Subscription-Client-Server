@@ -6,10 +6,10 @@
 
 #include "Utils.h"
 
-using Command = void (*)(std::vector<std::string>);
+using Command = void (*)(const std::vector<std::string>&, StompProtocol&);
 
 
-void Parser::parseCommand(const std::string &input)
+void Parser::parseCommand(const std::string &input, StompProtocol& protocol)
 {
     if (input.empty())
         return;
@@ -30,17 +30,41 @@ void Parser::parseCommand(const std::string &input)
     auto it = commands.find(args.front());
 
     if (it == commands.end()) {
-        std::cerr << "Invalid command: '" << args.front() << '\n';
+        std::cerr << "Invalid command: '" << args.front() << "'\n";
         return;
     } else if (args.size() < it->second.second) {
         std::cerr << "Command '" << it->first
-                  << "' requires " << it->second.second - 1 << "arguments\n";
+                  << "' requires " << it->second.second - 1 << " argument(s)\n";
         return;
     }
 
     try {
-        (*it->second.first)(args);
+        (*it->second.first)(args, protocol);
     } catch (std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
     }
+}
+
+void Parser::login(const std::vector<std::string>& args, StompProtocol& protocol)
+{
+}
+
+void Parser::join(const std::vector<std::string>& args, StompProtocol& protocol)
+{
+}
+
+void Parser::exit(const std::vector<std::string>& args, StompProtocol& protocol)
+{
+}
+
+void Parser::report(const std::vector<std::string>& args, StompProtocol& protocol)
+{
+}
+
+void Parser::summary(const std::vector<std::string>& args, StompProtocol& protocol)
+{
+}
+
+void Parser::logout(const std::vector<std::string>& args, StompProtocol& protocol)
+{
 }

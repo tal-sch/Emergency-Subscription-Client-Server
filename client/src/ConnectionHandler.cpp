@@ -9,7 +9,6 @@ ConnectionHandler::ConnectionHandler(std::string host, short port)
 	, _ioService()
 	, _socket(_ioService)
 {
-
 }
 
 ConnectionHandler::~ConnectionHandler()

@@ -3,45 +3,50 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 #include "ConnectionHandler.h"
-#include "event.h"
+#include "Event.h"
 
+
+enum class FrameType
+{
+    CONNECT,
+    SEND,
+    SUBSCRIBE,
+    UNSUBSCRIBE,
+    DISCONNECT,
+    CONNECTED,
+    MESSAGE,
+    RECEIPT,
+    ERROR
+};
+
+class Frame
+{
+public:
+    Frame(FrameType type, const std::unordered_map<std::string, std::string>& headers, const std::string& body);
+    FrameType type() const;
+    const std::string& getHeader(const std::string& header) const;
+    const std::string& body() const;
+
+private:
+    FrameType _type;
+    std::unordered_map<std::string, std::string> _headers;
+    std::string _body;
+
+    static Frame parseFrame(char bytes[]);
+};
 
 class StompProtocol
 {
 public:
-    enum class FrameType
-    {
-        CONNECT,
-        SEND,
-        SUBSCRIBE,
-        UNSUBSCRIBE,
-        DISCONNECT,
-        CONNECTED,
-        MESSAGE,
-        RECEIPT,
-        ERROR
-    };
-
-    class Frame
-    {
-    public:
-        Frame(FrameType type, std::unordered_map<std::string, std::string> headers, std::string body);
-
-        FrameType type() const;
-        const std::string& getHeader(const std::string& header) const;
-        const std::string& body() const;
-
-    private:
-        FrameType _type;
-        std::unordered_map<std::string, std::string> _headers;
-        std::string _body;
-    };
-
-    StompProtocol(ConnectionHandler& connection);
+    StompProtocol();
+    bool isLoggedIn() const;
+    bool exit() const;
 
 private:
-    ConnectionHandler& _connection;
+    std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
+    bool _exitApp;
 };
