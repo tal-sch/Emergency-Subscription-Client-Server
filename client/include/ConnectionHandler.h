@@ -41,6 +41,9 @@ public:
 	// Close down the connection properly.
 	void close();
 
+	bool readFrame(std::string& buffer);
+	bool sendFrame(const std::string& buffer);
+
 private:
 	const std::string _host;
 	const short _port;

@@ -113,3 +113,22 @@ void ConnectionHandler::close()
 	_socket.close(error);
 	if (error) std::cerr << "Error while closing socket: " << error.message() << '\n';
 }
+
+bool ConnectionHandler::readFrame(std::string& buffer)
+{
+	char c;
+
+	do {
+		if (!getBytes(&c, 1)) return false;
+		buffer.append(1, c);
+	} while (c != '\0');
+
+	buffer.pop_back();
+    return true;
+}
+
+bool ConnectionHandler::sendFrame(const std::string& buffer)
+{
+	if (!sendBytes(buffer.c_str(), buffer.length() + 1)) return false;
+    return true;
+}

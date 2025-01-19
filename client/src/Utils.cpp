@@ -1,7 +1,7 @@
 #include "Utils.h"
 
 #include <sstream>
-
+#include <random>
 
 std::vector<std::string> Utils::split_str(const std::string &str, const char delim)
 {
@@ -19,4 +19,11 @@ std::vector<std::string> Utils::parseArgs(const std::string &input)
     std::vector<std::string> args;
     while (stream >> arg) args.push_back(arg);
     return args;
+}
+
+int Utils::generateReceiptID()
+{
+    std::default_random_engine generator;
+    std::uniform_int_distribution<int> distribution(10, 99);
+    return distribution(generator);
 }
