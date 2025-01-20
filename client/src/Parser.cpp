@@ -66,18 +66,10 @@ void Parser::login(const std::vector<std::string>& args, StompProtocol& protocol
     
     protocol.login(
         address.substr(0, colonPos),
-        std::stoi(address.substr(colonPos + 1)),
+        static_cast<short>(std::stoi(address.substr(colonPos + 1))),
         user,
         password
     );
-
-    Frame response = protocol.receiveFrame();
-
-    if (response.type() == FrameType::CONNECTED) {
-        std::cout << "Login successful\n";
-    } else {
-        std::cout << "Error: " << response.getHeader("message") << '\n';
-    }
 }
 
 void Parser::join(const std::vector<std::string>& args, StompProtocol& protocol)
@@ -98,16 +90,7 @@ void Parser::summary(const std::vector<std::string>& args, StompProtocol& protoc
 
 void Parser::logout(const std::vector<std::string>& args, StompProtocol& protocol)
 {
-    int receipt = Utils::generateReceiptID();
-
-    protocol.logout(receipt);
-
-    Frame response = protocol.receiveFrame();
-
-    if (response.type() == FrameType::RECEIPT
-        && response.getHeader("receipt-id") == std::to_string(receipt)) {
-            std::cout << "Logout successful\n";
-        }
+    protocol.logout(Utils::generateReceiptID());
 }
 
 void Parser::quit(const std::vector<std::string> &, StompProtocol &)

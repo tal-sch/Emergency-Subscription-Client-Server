@@ -1,6 +1,6 @@
 #include "ConnectionHandler.h"
 
-using boost::asio::ip::tcp;
+#include <sstream>
 
 
 ConnectionHandler::ConnectionHandler(std::string host, short port)
@@ -8,6 +8,7 @@ ConnectionHandler::ConnectionHandler(std::string host, short port)
 	, _port(port)
 	, _ioService()
 	, _socket(_ioService)
+	, _mtxSocket()
 {
 }
 
@@ -16,24 +17,16 @@ ConnectionHandler::~ConnectionHandler()
 	close();
 }
 
-bool ConnectionHandler::connect()
+void ConnectionHandler::connect()
 {
 	std::cout << "Connecting to "
 	          << _host << ":" << _port << '\n';
 
-	tcp::endpoint endpoint(
+	boost::asio::ip::tcp::endpoint endpoint(
 		boost::asio::ip::address::from_string(_host),
-		_port); // the server endpoint
+		_port);
 
-	boost::system::error_code error;
-	_socket.connect(endpoint, error);
-	
-	if (error) {
-		std::cerr << "Connection failed (Error: " << error.message() << ")\n";
-		return false;
-	}
-
-	return true;
+	_socket.connect(endpoint);
 }
 
 bool ConnectionHandler::getBytes(char bytes[], unsigned int bytesToRead)
@@ -106,6 +99,19 @@ bool ConnectionHandler::sendFrameAscii(const std::string &frame, char delimiter)
 	return sendBytes(&delimiter, 1);
 }
 
+bool ConnectionHandler::getByte(char *pData)
+{
+	boost::system::error_code ec;
+	_socket.read_some(boost::asio::buffer(pData, 1), ec);
+
+	if (ec) {
+		std::cerr << "Error while reading from socket: " << ec.message() << '\n';
+		return false;
+	}
+
+    return false;
+}
+
 // Close down the connection properly.
 void ConnectionHandler::close()
 {
@@ -114,21 +120,19 @@ void ConnectionHandler::close()
 	if (error) std::cerr << "Error while closing socket: " << error.message() << '\n';
 }
 
-bool ConnectionHandler::readFrame(std::string& buffer)
+std::string ConnectionHandler::readFrame()
 {
-	char c;
-
-	do {
-		if (!getBytes(&c, 1)) return false;
-		buffer.append(1, c);
-	} while (c != '\0');
-
-	buffer.pop_back();
-    return true;
+	boost::asio::streambuf buffer;
+	boost::asio::read_until(_socket, buffer, '\0');
+	return std::string(std::istreambuf_iterator<char>(&buffer), std::istreambuf_iterator<char>());
 }
 
-bool ConnectionHandler::sendFrame(const std::string& buffer)
+void ConnectionHandler::sendFrame(const std::string& data)
 {
-	if (!sendBytes(buffer.c_str(), buffer.length() + 1)) return false;
-    return true;
+	_socket.send(boost::asio::buffer(data));
+}
+
+bool ConnectionHandler::isConnected() const
+{
+    return _socket.is_open();
 }

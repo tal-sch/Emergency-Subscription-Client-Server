@@ -28,15 +28,16 @@ const std::string &Frame::body() const
     return _body;
 }
 
-std::string Frame::toString() const
+std::string Frame::raw() const
 {
     std::string frame = getFrameName(_type) + '\n';
     
     for (auto header : _headers)
-        frame.append(header.first + ':' + header.second);
+        frame.append(header.first + ':' + header.second + '\n');
 
     frame.append(1, '\n');
     frame.append(_body);
+    frame.append(1, '\0');
     
     return frame;
 }
@@ -69,7 +70,8 @@ Frame Frame::parseFrame(const std::string &frame)
 }
 
 StompProtocol::StompProtocol()
-    : _pConnection()
+    : _loggedIn(false)
+    , _pConnection()
     , _data()
 {
 }
@@ -77,33 +79,61 @@ StompProtocol::StompProtocol()
 void StompProtocol::closeConnection()
 {
     _pConnection.release();
-}
-
-Frame StompProtocol::receiveFrame()
-{
-    std::string buffer;
-    _pConnection->readFrame(buffer);
-    return Frame::parseFrame(buffer);
+    _loggedIn = false;
 }
 
 void StompProtocol::login(const std::string &host, short port, const std::string &username, const std::string &password)
 {
-    _pConnection = std::unique_ptr<ConnectionHandler>(new ConnectionHandler(host, port));
+    if (_loggedIn)
+        throw std::logic_error("Already logged in");
 
-    if (!_pConnection->connect())
-        return;
+    if (_pConnection == nullptr)
+        _pConnection = std::unique_ptr<ConnectionHandler>(new ConnectionHandler(host, port));
+    
+    if (!_pConnection->isConnected())
+        _pConnection->connect();
+    
+    send(Frame::Connect(username, password));
 
-    _pConnection->sendFrame(Frame::connectFrame(username, password).toString());
+    Frame response = recv();
+
+    if (response.type() == FrameType::CONNECTED) {
+        std::cout << "Login successful\n";
+        _loggedIn = true;
+    } else {
+        std::cout << response.getHeader("message") << '\n';
+    }
 }
 
 void StompProtocol::logout(int receipt)
 {
-    _pConnection->sendFrame(Frame::disconnectFrame(receipt).toString());
+    if (!_loggedIn)
+        throw std::logic_error("Not logged in");
+    
+    send(Frame::Disconnect(receipt));
+
+    Frame response = recv();
+
+    if (response.type() == FrameType::RECEIPT
+        && response.getHeader("receipt-id") == std::to_string(receipt)) {
+        std::cout << "Logout successful\n";
+        closeConnection();
+    }
 }
 
-const char *Frame::getFrameName(FrameType t)
+void StompProtocol::send(const Frame &frame)
 {
-    static const char* names[] = {
+    _pConnection->sendFrame(frame.raw());
+}
+
+Frame StompProtocol::recv()
+{
+    return Frame::parseFrame(_pConnection->readFrame());
+}
+
+const std::string& Frame::getFrameName(FrameType t)
+{
+    static const std::string names[] = {
         "CONNECT",
         "SEND",
         "SUBSCRIBE",
@@ -140,7 +170,7 @@ FrameType Frame::getFrameType(const std::string &name)
     return it->second;
 }
 
-Frame Frame::connectFrame(const std::string &user, const std::string &password)
+Frame Frame::Connect(const std::string &user, const std::string &password)
 {
     std::unordered_map<std::string, std::string> headers = {
         {"login", user},
@@ -152,7 +182,7 @@ Frame Frame::connectFrame(const std::string &user, const std::string &password)
     return Frame(FrameType::CONNECT, headers, std::string());
 }
 
-Frame Frame::disconnectFrame(int receipt)
+Frame Frame::Disconnect(int receipt)
 {
     return Frame(
         FrameType::DISCONNECT,

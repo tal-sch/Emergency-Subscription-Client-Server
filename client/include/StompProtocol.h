@@ -25,23 +25,24 @@ enum class FrameType
 class Frame
 {
 public:
-    Frame(FrameType type, const std::unordered_map<std::string, std::string>& headers, const std::string& body);
     FrameType type() const;
     const std::string getHeader(const std::string& header) const;
     const std::string& body() const;
 
-    std::string toString() const;
+    std::string raw() const;
     static Frame parseFrame(const std::string& frame);
-    static const char* getFrameName(FrameType t);
+    static const std::string& getFrameName(FrameType t);
     static FrameType getFrameType(const std::string& name);
 
-    static Frame connectFrame(const std::string& user, const std::string& password);
-    static Frame disconnectFrame(int receipt);
+    static Frame Connect(const std::string& user, const std::string& password);
+    static Frame Disconnect(int receipt);
     
 private:
     FrameType _type;
     std::unordered_map<std::string, std::string> _headers;
     std::string _body;
+
+    Frame(FrameType type, const std::unordered_map<std::string, std::string>& headers, const std::string& body);
 };
 
 class StompProtocol
@@ -51,12 +52,14 @@ public:
 
     void closeConnection();
 
-    Frame receiveFrame();
-
     void login(const std::string& host, short port, const std::string& username, const std::string& password);
     void logout(int receipt);
 
 private:
+    bool _loggedIn;
     std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
+
+    void send(const Frame& frame);
+    Frame recv();
 };
