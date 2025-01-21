@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <iostream>
+#include <ostream>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -20,6 +20,9 @@ public:
     const std::string &get_name() const;
     int get_date_time() const;
     const std::map<std::string, std::string> &get_general_information() const;
+
+    std::string summary() const;
+    std::string toString() const;
     
 private:
     std::string _channelName; // name of channel

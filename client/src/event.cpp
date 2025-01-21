@@ -1,12 +1,10 @@
 #include "Event.h"
 
-#include <iostream>
 #include <fstream>
 #include <string>
 #include <map>
 #include <vector>
 #include <sstream>
-#include <cstring>
 
 #include "json.hpp"
 
@@ -63,6 +61,29 @@ int Event::get_date_time() const
 const std::map<std::string, std::string> &Event::get_general_information() const
 {
     return _generalInfo;
+}
+
+std::string Event::summary() const
+{
+    std::string summary = _description.substr(0, 27);
+    if (summary.length() < _description.length()) summary.append("...");
+    return summary;
+}
+
+std::string Event::toString() const
+{
+    std::ostringstream stream;
+
+    stream << "user: " << _eventOwner << '\n'
+           << "city: " << _city << '\n'
+           << "event name: " << _name << '\n'
+           << "date time: " << _datetime << '\n'
+           << "general information:\n"
+                << "\tactive: " << _generalInfo.at("active") << '\n'
+                << "\tforces_arrival_at_scene: " << _generalInfo.at("forces_arrival_at_scene") << '\n'
+           << "description: " << _description;
+
+    return stream.str();
 }
 
 std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::string &frameBody)

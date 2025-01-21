@@ -90,6 +90,22 @@ void StompProtocol::closeConnection()
     _loggedIn = false;
 }
 
+std::vector<Event> StompProtocol::getReportsFrom(const std::string &channel, const std::string &user)
+{
+    auto channelIt = _data.find(channel);
+
+    if (channelIt == _data.end())
+        return std::vector<Event>();
+
+    auto channelData = channelIt->second;
+    auto userIt = channelData.find(user);
+
+    if (userIt == channelData.end())
+        return std::vector<Event>();
+
+    return userIt->second;
+}
+
 void StompProtocol::login(const std::string &host, short port, const std::string &username, const std::string &password)
 {
     if (_loggedIn)
@@ -185,6 +201,30 @@ void StompProtocol::unsubscribe(const std::string &topic)
     }
 }
 
+void StompProtocol::report(Event &event)
+{
+    if (!_loggedIn)
+        throw std::logic_error("Not logged in");
+
+    int receipt = generateReceiptID();
+
+    event.setEventOwnerUser(_username);
+
+    std::cout << "reporting " << event.get_name() << '\n';
+    send(Frame::Send(event,receipt));
+
+    Frame response = recv();
+
+    if (response.type() == FrameType::RECEIPT
+        && response.getHeader("receipt-id") == std::to_string(receipt)) {
+        _data[event.get_channel_name()][event.getEventOwnerUser()].push_back(event);
+    } else {
+        std::cout << "Error: reporting event failed\n"
+                  << response.body() << '\n';
+    }
+    
+}
+
 void StompProtocol::send(const Frame &frame)
 {
     _pConnection->sendFrame(frame.raw());
@@ -270,6 +310,15 @@ Frame Frame::Unsubscribe(int id, int receipt)
     return Frame(
         FrameType::UNSUBSCRIBE,
         {{"id", std::to_string(id)}, {"receipt", std::to_string(receipt)}}
+    );
+}
+
+Frame Frame::Send(const Event &event, int receipt)
+{
+    return Frame(
+        FrameType::SEND,
+        {{"receipt", std::to_string(receipt)}, {"destination", "/" + event.get_channel_name()}},
+        event.toString()
     );
 }
 

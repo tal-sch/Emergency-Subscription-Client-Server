@@ -3,7 +3,10 @@
 #include <unordered_map>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <exception>
+#include <ctime>
+#include <iomanip>
 
 using Command = void (*)(const std::vector<std::string>&, StompProtocol&);
 
@@ -61,6 +64,50 @@ std::vector<std::string> Parser::parseArgs(const std::string &input)
     return args;
 }
 
+void Parser::writeSummary(const std::string &fileName, const std::vector<Event> &reports)
+{
+    std::string channelName = reports.front().get_channel_name();
+    size_t activeCount = 0;
+    size_t forcesArrivalCount = 0;
+
+    for (const Event& report : reports) {
+        const std::map<std::string, std::string>& info = report.get_general_information();
+        bool active = (info.at("active") == "true") ? true : false;
+        bool forcesArrival = (info.at("forces_arrival_at_scene") == "true") ? true : false;
+        if (active) ++activeCount;
+        if (forcesArrival) ++forcesArrivalCount;
+    }
+
+    std::ofstream f(fileName);
+
+    f << "Channel " << channelName << '\n'
+      << "Stats:\nTotal: " << reports.size() << '\n'
+      << "Active: " << activeCount << '\n'
+      << "Forces arrival at scene: " << forcesArrivalCount << "\n\n";
+
+    f << "Event Reports:\n\n";
+
+    for (size_t i = 0; i < reports.size(); ++i) {
+        const Event& report = reports[i];
+
+        f << "Report_" << i + 1 << ":\n\t"
+          << "city: " << report.get_city() << "\n\t"
+          << "date time: " << epochToString(report.get_date_time()) << "\n\t"
+          << "event name: " << report.get_name() << "\n\t"
+          << "summary: " << report.summary() << '\n';
+
+        f << '\n';
+    }
+}
+
+std::string Parser::epochToString(time_t val)
+{
+    std::tm* time = std::localtime(&val);
+    std::ostringstream stream;
+    stream << std::put_time(time, "%Y-%m-%d %H:%M");
+    return stream.str();
+}
+
 void Parser::login(const std::vector<std::string> &args, StompProtocol &protocol)
 {
     std::string address = args[1];
@@ -92,10 +139,39 @@ void Parser::exit(const std::vector<std::string>& args, StompProtocol& protocol)
 
 void Parser::report(const std::vector<std::string>& args, StompProtocol& protocol)
 {
+    const std::string& file = args[1];
+
+    std::ifstream f(file);
+
+    if (!f.is_open()) {
+        std::cerr << "Error: file '" << file << "' not found\n";
+        return;
+    }
+
+    f.close();
+
+    names_and_events data = parseEventsFile(file);
+
+    for (Event& event : data.events)
+        protocol.report(event);
+
+    std::cout << "Events reported\n";
 }
 
 void Parser::summary(const std::vector<std::string>& args, StompProtocol& protocol)
 {
+    const std::string& channel = args[1];
+    const std::string& user = args[2];
+    const std::string& file = args[3];
+
+    std::vector<Event> reports = protocol.getReportsFrom(channel, user);
+
+    if (reports.empty()) {
+        std::cout << "Nothing to summarize\n";
+        return;
+    }
+
+    writeSummary(file, reports);
 }
 
 void Parser::logout(const std::vector<std::string>& args, StompProtocol& protocol)

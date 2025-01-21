@@ -38,6 +38,7 @@ public:
     static Frame Disconnect(int receipt);
     static Frame Subscribe(const std::string& topic, int id, int receipt);
     static Frame Unsubscribe(int id, int receipt);
+    static Frame Send(const Event& event, int receipt);
     
 private:
     FrameType _type;
@@ -54,11 +55,13 @@ public:
     StompProtocol();
 
     void closeConnection();
+    std::vector<Event> getReportsFrom(const std::string& channel, const std::string& user);
 
     void login(const std::string& host, short port, const std::string& username, const std::string& password);
     void logout();
     void subscribe(const std::string& topic);
     void unsubscribe(const std::string& topic);
+    void report(Event& event);
 
 private:
     bool _loggedIn;
