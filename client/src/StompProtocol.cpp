@@ -78,12 +78,15 @@ StompProtocol::StompProtocol()
     , _username()
     , _pConnection()
     , _data()
+    , _subscriptions()
 {
 }
 
 void StompProtocol::closeConnection()
 {
     _pConnection.release();
+    _username.clear();
+    _subscriptions.clear();
     _loggedIn = false;
 }
 
@@ -107,6 +110,7 @@ void StompProtocol::login(const std::string &host, short port, const std::string
     if (response.type() == FrameType::CONNECTED) {
         std::cout << "Login successful\n";
         _loggedIn = true;
+        _username = username;
     } else {
         std::cout << response.getHeader("message") << '\n';
     }
@@ -135,17 +139,48 @@ void StompProtocol::subscribe(const std::string &topic)
     if (!_loggedIn)
         throw std::logic_error("Not logged in");
 
-    int subID = generateSubscriptionID(topic);
+    if (_subscriptions.find(topic) != _subscriptions.end())
+        throw std::invalid_argument("Already subscribed to '" + topic + '\'');
+
+    size_t subID = generateSubscriptionID(topic);
     int receipt = generateReceiptID();
 
     send(Frame::Subscribe(topic, subID, receipt));
 
     Frame response = recv();
 
-    if (response.type() == FrameType::RECEIPT) {
+    if (response.type() == FrameType::RECEIPT
+        && response.getHeader("receipt-id") == std::to_string(receipt)) {
         std::cout << "Joined channel '" << topic << "'\n";
+        _subscriptions[topic] = subID;
     } else {
         std::cout << "Could not join channel '" << topic << "'\n"
+                  << response.getHeader("message") << '\n';
+    }
+}
+
+void StompProtocol::unsubscribe(const std::string &topic)
+{
+    if (!_loggedIn)
+        throw std::logic_error("Not logged in");
+
+    auto it = _subscriptions.find(topic);
+    
+    if (it == _subscriptions.end())
+        throw std::invalid_argument("Not subscribed to '" + topic + '\'');
+
+    int receipt = generateReceiptID();
+
+    send(Frame::Unsubscribe(it->second, receipt));
+
+    Frame response = recv();
+
+    if (response.type() == FrameType::RECEIPT
+        && response.getHeader("receipt-id") == std::to_string(receipt)) {
+        std::cout << "Exited channel '" << topic << "'\n";
+        _subscriptions.erase(it);
+    } else {
+        std::cout << "Could not exit channel '" << topic << "'\n"
                   << response.getHeader("message") << '\n';
     }
 }
@@ -230,6 +265,14 @@ Frame Frame::Subscribe(const std::string &topic, int id, int receipt)
     return Frame(FrameType::SUBSCRIBE, headers);
 }
 
+Frame Frame::Unsubscribe(int id, int receipt)
+{
+    return Frame(
+        FrameType::UNSUBSCRIBE,
+        {{"id", std::to_string(id)}, {"receipt", std::to_string(receipt)}}
+    );
+}
+
 int StompProtocol::generateReceiptID()
 {
     std::default_random_engine generator;
@@ -237,7 +280,7 @@ int StompProtocol::generateReceiptID()
     return distribution(generator);
 }
 
-int StompProtocol::generateSubscriptionID(const std::string &topic)
+size_t StompProtocol::generateSubscriptionID(const std::string &topic)
 {
     std::string s = _username + topic;
     std::hash<std::string> hash;

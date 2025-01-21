@@ -82,10 +82,12 @@ void Parser::login(const std::vector<std::string> &args, StompProtocol &protocol
 
 void Parser::join(const std::vector<std::string>& args, StompProtocol& protocol)
 {
+    protocol.subscribe(args[1]);
 }
 
 void Parser::exit(const std::vector<std::string>& args, StompProtocol& protocol)
 {
+    protocol.unsubscribe(args[1]);
 }
 
 void Parser::report(const std::vector<std::string>& args, StompProtocol& protocol)

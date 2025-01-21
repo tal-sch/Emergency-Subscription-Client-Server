@@ -37,6 +37,7 @@ public:
     static Frame Connect(const std::string& user, const std::string& password);
     static Frame Disconnect(int receipt);
     static Frame Subscribe(const std::string& topic, int id, int receipt);
+    static Frame Unsubscribe(int id, int receipt);
     
 private:
     FrameType _type;
@@ -57,16 +58,18 @@ public:
     void login(const std::string& host, short port, const std::string& username, const std::string& password);
     void logout();
     void subscribe(const std::string& topic);
+    void unsubscribe(const std::string& topic);
 
 private:
     bool _loggedIn;
     std::string _username;
     std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
+    std::unordered_map<std::string, size_t> _subscriptions;
 
     void send(const Frame& frame);
     Frame recv();
 
     static int generateReceiptID();
-    int generateSubscriptionID(const std::string& topic);
+    size_t generateSubscriptionID(const std::string& topic);
 };
