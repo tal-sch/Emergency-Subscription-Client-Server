@@ -32,27 +32,30 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
         this.reactor = reactor;
     }
 
+    public MessagingProtocol getProtocol(){
+        return this.protocol;
+    }
     public Runnable continueRead() {
         ByteBuffer buf = leaseBuffer();
-
+    
         boolean success = false;
         try {
-            success = chan.read(buf) != -1;
+            success = chan.read(buf) != -1; // Read bytes into buffer
         } catch (IOException ex) {
             ex.printStackTrace();
         }
-
+    
         if (success) {
-            buf.flip();
+            buf.flip(); 
             return () -> {
                 try {
                     while (buf.hasRemaining()) {
                         T nextMessage = encdec.decodeNextByte(buf.get());
                         if (nextMessage != null) {
-                            T response = protocol.process(nextMessage);
-                            if (response != null) {
-                                writeQueue.add(ByteBuffer.wrap(encdec.encode(response)));
-                                reactor.updateInterestedOps(chan, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+                            protocol.process(nextMessage);
+                            if (protocol.shouldTerminate()) {
+                                close();
+                                return;
                             }
                         }
                     }
@@ -65,8 +68,9 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
             close();
             return null;
         }
-
     }
+    
+
 
     public void close() {
         try {
@@ -118,6 +122,9 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
 
     @Override
     public void send(T msg) {
-        //IMPLEMENT IF NEEDED
+        ByteBuffer encodedMessage = ByteBuffer.wrap(encdec.encode(msg));
+        writeQueue.add(encodedMessage);
+        reactor.updateInterestedOps(chan, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
     }
+    
 }

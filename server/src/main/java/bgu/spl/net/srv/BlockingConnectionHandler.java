@@ -22,6 +22,10 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
         this.protocol = protocol;
     }
 
+    public MessagingProtocol getProtocol(){
+        return this.protocol;
+    }
+
     @Override
     public void run() {
         try (Socket sock = this.sock) { //just for automatic closing
@@ -33,11 +37,7 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
             while (!protocol.shouldTerminate() && connected && (read = in.read()) >= 0) {
                 T nextMessage = encdec.decodeNextByte((byte) read);
                 if (nextMessage != null) {
-                    T response = protocol.process(nextMessage);
-                    if (response != null) {
-                        out.write(encdec.encode(response));
-                        out.flush();
-                    }
+                    protocol.process(nextMessage);
                 }
             }
 
@@ -50,11 +50,26 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
     @Override
     public void close() throws IOException {
         connected = false;
+        System.out.println("Closing connection: " + sock.getRemoteSocketAddress());
         sock.close();
     }
 
     @Override
-    public void send(T msg) {
-        //IMPLEMENT IF NEEDED
+    public synchronized void send(T msg) {
+        if (connected) {
+            try {
+                byte[] encodedMessage = encdec.encode(msg);
+                out.write(encodedMessage);
+                out.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+                connected = false;
+                try {
+                    close();
+                } catch (IOException closeException) {
+                    closeException.printStackTrace();
+                }
+            }
+        }
     }
 }
