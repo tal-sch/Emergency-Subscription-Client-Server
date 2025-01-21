@@ -3,12 +3,16 @@
 #include <unordered_map>
 #include <sstream>
 #include <exception>
+#include <random>
 
+
+Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers)
+    : Frame(type, headers, std::string())
+{
+}
 
 Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers, const std::string &body)
-    : _type(type)
-    , _headers(headers)
-    , _body(body)
+    : _type(type), _headers(headers), _body(body)
 {
 }
 
@@ -71,6 +75,7 @@ Frame Frame::parseFrame(const std::string &frame)
 
 StompProtocol::StompProtocol()
     : _loggedIn(false)
+    , _username()
     , _pConnection()
     , _data()
 {
@@ -90,8 +95,10 @@ void StompProtocol::login(const std::string &host, short port, const std::string
     if (_pConnection == nullptr)
         _pConnection = std::unique_ptr<ConnectionHandler>(new ConnectionHandler(host, port));
     
-    if (!_pConnection->isConnected())
-        _pConnection->connect();
+    if (!_pConnection->isConnected()) {
+        if (!_pConnection->connect())
+            return;
+    }
     
     send(Frame::Connect(username, password));
 
@@ -105,10 +112,12 @@ void StompProtocol::login(const std::string &host, short port, const std::string
     }
 }
 
-void StompProtocol::logout(int receipt)
+void StompProtocol::logout()
 {
     if (!_loggedIn)
         throw std::logic_error("Not logged in");
+    
+    int receipt = generateReceiptID();
     
     send(Frame::Disconnect(receipt));
 
@@ -118,6 +127,26 @@ void StompProtocol::logout(int receipt)
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
         std::cout << "Logout successful\n";
         closeConnection();
+    }
+}
+
+void StompProtocol::subscribe(const std::string &topic)
+{
+    if (!_loggedIn)
+        throw std::logic_error("Not logged in");
+
+    int subID = generateSubscriptionID(topic);
+    int receipt = generateReceiptID();
+
+    send(Frame::Subscribe(topic, subID, receipt));
+
+    Frame response = recv();
+
+    if (response.type() == FrameType::RECEIPT) {
+        std::cout << "Joined channel '" << topic << "'\n";
+    } else {
+        std::cout << "Could not join channel '" << topic << "'\n"
+                  << response.getHeader("message") << '\n';
     }
 }
 
@@ -179,14 +208,38 @@ Frame Frame::Connect(const std::string &user, const std::string &password)
         {"host", "stomp.cs.bgu.ac.il"}
     };
 
-    return Frame(FrameType::CONNECT, headers, std::string());
+    return Frame(FrameType::CONNECT, headers);
 }
 
 Frame Frame::Disconnect(int receipt)
 {
     return Frame(
         FrameType::DISCONNECT,
-        {{"receipt", std::to_string(receipt)}},
-        std::string()
+        {{"receipt", std::to_string(receipt)}}
     );
+}
+
+Frame Frame::Subscribe(const std::string &topic, int id, int receipt)
+{
+    std::unordered_map<std::string, std::string> headers = {
+        {"destination", topic},
+        {"id", std::to_string(id)},
+        {"receipt", std::to_string(receipt)}
+    };
+
+    return Frame(FrameType::SUBSCRIBE, headers);
+}
+
+int StompProtocol::generateReceiptID()
+{
+    std::default_random_engine generator;
+    std::uniform_int_distribution<int> distribution(10, 99);
+    return distribution(generator);
+}
+
+int StompProtocol::generateSubscriptionID(const std::string &topic)
+{
+    std::string s = _username + topic;
+    std::hash<std::string> hash;
+    return hash(s);
 }

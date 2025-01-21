@@ -15,6 +15,8 @@ public:
 private:
     static bool _sQuit;
 
+    static std::vector<std::string> parseArgs(const std::string& input);
+
     static void login(const std::vector<std::string>&, StompProtocol&);
     static void join(const std::vector<std::string>&, StompProtocol&);
     static void exit(const std::vector<std::string>&, StompProtocol&);

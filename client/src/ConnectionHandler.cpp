@@ -17,16 +17,22 @@ ConnectionHandler::~ConnectionHandler()
 	close();
 }
 
-void ConnectionHandler::connect()
+bool ConnectionHandler::connect()
 {
-	std::cout << "Connecting to "
-	          << _host << ":" << _port << '\n';
-
 	boost::asio::ip::tcp::endpoint endpoint(
 		boost::asio::ip::address::from_string(_host),
 		_port);
 
-	_socket.connect(endpoint);
+	boost::system::error_code ec;
+	_socket.connect(endpoint, ec);
+
+	if (ec) {
+		std::cerr << "Error: server is not running\n";
+		_socket.close();
+		return false;
+	}
+
+	return true;
 }
 
 // Close down the connection properly.

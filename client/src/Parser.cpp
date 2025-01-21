@@ -2,9 +2,8 @@
 
 #include <unordered_map>
 #include <iostream>
+#include <sstream>
 #include <exception>
-
-#include "Utils.h"
 
 using Command = void (*)(const std::vector<std::string>&, StompProtocol&);
 
@@ -32,7 +31,7 @@ void Parser::parseCommand(const std::string &input, StompProtocol &protocol)
         {"quit", {Parser::quit, 1}}
     };
 
-    std::vector<std::string> args = Utils::parseArgs(input);
+    std::vector<std::string> args = parseArgs(input);
     if (args.empty()) return;
 
     auto it = commands.find(args.front());
@@ -53,7 +52,16 @@ void Parser::parseCommand(const std::string &input, StompProtocol &protocol)
     }
 }
 
-void Parser::login(const std::vector<std::string>& args, StompProtocol& protocol)
+std::vector<std::string> Parser::parseArgs(const std::string &input)
+{
+    std::istringstream stream(input);
+    std::string arg;
+    std::vector<std::string> args;
+    while (stream >> arg) args.push_back(arg);
+    return args;
+}
+
+void Parser::login(const std::vector<std::string> &args, StompProtocol &protocol)
 {
     std::string address = args[1];
     std::string user = args[2];
@@ -90,7 +98,7 @@ void Parser::summary(const std::vector<std::string>& args, StompProtocol& protoc
 
 void Parser::logout(const std::vector<std::string>& args, StompProtocol& protocol)
 {
-    protocol.logout(Utils::generateReceiptID());
+    protocol.logout();
 }
 
 void Parser::quit(const std::vector<std::string> &, StompProtocol &)

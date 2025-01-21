@@ -12,7 +12,7 @@ public:
 	ConnectionHandler(std::string host, short port);
 	~ConnectionHandler();
 
-	void connect();
+	bool connect();
 
 	void close();
 

@@ -3,8 +3,8 @@ LDFLAGS := -lboost_system -lpthread
 
 all: StompEMIClient
 
-StompEMIClient: bin bin/ConnectionHandler.o bin/StompClient.o bin/Event.o bin/Parser.o bin/StompProtocol.o bin/Utils.o
-	g++ -o bin/StompEMIClient bin/ConnectionHandler.o bin/StompClient.o bin/Event.o bin/Parser.o bin/StompProtocol.o bin/Utils.o $(LDFLAGS)
+StompEMIClient: bin bin/ConnectionHandler.o bin/StompClient.o bin/Event.o bin/Parser.o bin/StompProtocol.o
+	g++ -o bin/StompEMIClient bin/ConnectionHandler.o bin/StompClient.o bin/Event.o bin/Parser.o bin/StompProtocol.o $(LDFLAGS)
 
 bin:
 	mkdir bin
@@ -23,9 +23,6 @@ bin/StompProtocol.o: src/StompProtocol.cpp
 
 bin/Parser.o: src/Parser.cpp
 	g++ $(CFLAGS) -o bin/Parser.o src/Parser.cpp
-
-bin/Utils.o: src/Utils.cpp
-	g++ $(CFLAGS) -o bin/Utils.o src/Utils.cpp
 
 .PHONY: clean run
 clean:
