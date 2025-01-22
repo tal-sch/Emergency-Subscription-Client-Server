@@ -71,14 +71,13 @@ public class Reactor<T> implements Server<T> {
                     }
                 }
 
-                selector.selectedKeys().clear(); //clear the selected keys set so that we can know about new events
+                selector.selectedKeys().clear();
 
             }
 
         } catch (ClosedSelectorException ex) {
-            //do nothing - server was requested to be closed
+
         } catch (IOException ex) {
-            //this is an error
             ex.printStackTrace();
         }
 
@@ -102,12 +101,16 @@ public class Reactor<T> implements Server<T> {
     private void handleAccept(ServerSocketChannel serverChan, Selector selector) throws IOException {
         SocketChannel clientChan = serverChan.accept();
         clientChan.configureBlocking(false);
+
+        MessagingProtocol<T> protocol = protocolFactory.get();
+        protocol.start(connectionIdCounter.get(), this.connections);
+
         final NonBlockingConnectionHandler<T> handler = new NonBlockingConnectionHandler<>(
                 readerFactory.get(),
-                protocolFactory.get(),
+                protocol,
                 clientChan,
                 this);
-        handler.getProtocol().start(connectionIdCounter.get(), this.connections);
+                
         this.connections.addConnection(connectionIdCounter.getAndIncrement(), handler);
         clientChan.register(selector, SelectionKey.OP_READ, handler);
     }
@@ -138,5 +141,11 @@ public class Reactor<T> implements Server<T> {
     public void close() throws IOException {
         selector.close();
     }
+
+    public Selector getSelector() {
+        return this.selector;
+    }
+
+    
 
 }

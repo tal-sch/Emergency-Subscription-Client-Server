@@ -72,39 +72,80 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
     
 
 
+    @Override
     public void close() {
+        if (isClosed()) return; 
+    
         try {
-            chan.close();
+            while (!writeQueue.isEmpty()) {
+                ByteBuffer top = writeQueue.peek();
+                chan.write(top);
+                if (!top.hasRemaining()) {
+                    writeQueue.poll();
+                }
+            }
         } catch (IOException ex) {
-            ex.printStackTrace();
+            
+        } finally {
+            try {
+                if (chan.isOpen()) {
+                    SelectionKey key = chan.keyFor(reactor.getSelector());
+                    if (key != null) {
+                        key.cancel();
+                    }
+                    chan.close();
+                }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
     }
+    
+    
+    
+    
+    
+    
+    
 
     public boolean isClosed() {
         return !chan.isOpen();
     }
 
     public void continueWrite() {
-        while (!writeQueue.isEmpty()) {
-            try {
-                ByteBuffer top = writeQueue.peek();
-                chan.write(top);
-                if (top.hasRemaining()) {
-                    return;
-                } else {
-                    writeQueue.remove();
-                }
-            } catch (IOException ex) {
-                ex.printStackTrace();
-                close();
-            }
-        }
+    if (isClosed()) return;
 
-        if (writeQueue.isEmpty()) {
-            if (protocol.shouldTerminate()) close();
-            else reactor.updateInterestedOps(chan, SelectionKey.OP_READ);
+    while (!writeQueue.isEmpty()) {
+        try {
+            ByteBuffer top = writeQueue.peek();
+            if (chan.isOpen()) {
+                chan.write(top);
+            } else {
+                return;
+            }
+            if (!top.hasRemaining()) {
+                writeQueue.poll();
+            } else {
+                return; 
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            close();
+            return;
         }
     }
+
+    if (writeQueue.isEmpty()) {
+        if (protocol.shouldTerminate()) {
+            close();
+        } else {
+            reactor.updateInterestedOps(chan, SelectionKey.OP_READ);
+        }
+    }
+}
+
+    
+    
 
     private static ByteBuffer leaseBuffer() {
         ByteBuffer buff = BUFFER_POOL.poll();
@@ -122,8 +163,7 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
 
     @Override
     public void send(T msg) {
-        ByteBuffer encodedMessage = ByteBuffer.wrap(encdec.encode(msg));
-        writeQueue.add(encodedMessage);
+        writeQueue.add(ByteBuffer.wrap(encdec.encode(msg)));
         reactor.updateInterestedOps(chan, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
     }
     

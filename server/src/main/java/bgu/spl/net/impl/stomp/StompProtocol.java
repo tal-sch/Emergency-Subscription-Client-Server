@@ -2,6 +2,8 @@ package bgu.spl.net.impl.stomp;
 
 import bgu.spl.net.api.StompMessagingProtocol;
 import bgu.spl.net.srv.Connections;
+import bgu.spl.net.srv.Reactor;
+
 import java.util.HashMap;
 import bgu.spl.net.impl.stomp.ConnectionsImpl;
 

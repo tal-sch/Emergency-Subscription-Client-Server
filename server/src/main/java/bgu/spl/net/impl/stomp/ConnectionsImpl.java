@@ -18,10 +18,8 @@ public class ConnectionsImpl <T> implements Connections <T>{
 
     public boolean send(int connectionId, T msg) {
         ConnectionHandler<T> handler = connectionHandlers.get(connectionId);
-        System.out.println(handler == null);
         if (handler != null) {
             handler.send(msg);
-            System.out.println("handler sent");
             return true;
         }
         return false;
@@ -41,7 +39,7 @@ public class ConnectionsImpl <T> implements Connections <T>{
         for (Set<Integer> subscribers : topicSubscribers.values()) {
             subscribers.remove(connectionId);
         }
-
+        connectionHandlers.remove(connectionId);
         removeActiveUser(connectionId);
     }
     
@@ -86,6 +84,10 @@ public class ConnectionsImpl <T> implements Connections <T>{
     }
     public ConcurrentHashMap<Integer, String> getActiveUsers() {
         return activeUsers;
+    }
+
+    public ConnectionHandler<T> getHandler(int connectionId) {
+        return connectionHandlers.get(connectionId);
     }
 
 }
