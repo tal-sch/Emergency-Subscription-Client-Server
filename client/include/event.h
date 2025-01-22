@@ -23,6 +23,8 @@ public:
 
     std::string summary() const;
     std::string toString() const;
+
+    static std::vector<Event> fromJsonFile(const std::string& path);
     
 private:
     std::string _channelName; // name of channel

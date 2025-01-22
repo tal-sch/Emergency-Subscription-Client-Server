@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 #include <sstream>
+#include <iostream>
 
 #include "json.hpp"
 
@@ -139,6 +140,40 @@ std::map<std::string, std::string> Event::parseGeneralInfo(const std::string &in
     }
 
     return data;
+}
+
+std::vector<Event> Event::fromJsonFile(const std::string &path)
+{
+    std::vector<Event> events;
+    std::ifstream f(path);
+
+    if (!f.is_open()) {
+        std::cerr << "Could not open file '" << path << "'\n";
+        return events;
+    }
+
+    json data = json::parse(f);
+    std::string channel_name = data["channel_name"];
+
+    for (auto& event : data["events"]) {
+        std::map<std::string, std::string> general_information;
+
+        for (auto& field : event["general_information"].items()) {
+            general_information[field.key()] = (field.value().is_string())
+                ? (std::string)field.value() : field.value().dump();
+        }
+
+        events.emplace_back(
+            channel_name,
+            event["city"],
+            event["event_name"],
+            event["date_time"],
+            event["description"],
+            general_information
+        );
+    }
+    
+    return events; 
 }
 
 const std::string &Event::get_description() const

@@ -140,19 +140,12 @@ void Parser::exit(const std::vector<std::string>& args, StompProtocol& protocol)
 void Parser::report(const std::vector<std::string>& args, StompProtocol& protocol)
 {
     const std::string& file = args[1];
+    std::vector<Event> events = Event::fromJsonFile(file);
 
-    std::ifstream f(file);
-
-    if (!f.is_open()) {
-        std::cerr << "Error: file '" << file << "' not found\n";
+    if (events.empty())
         return;
-    }
 
-    f.close();
-
-    names_and_events data = parseEventsFile(file);
-
-    for (Event& event : data.events)
+    for (Event& event : events)
         protocol.report(event);
 
     std::cout << "Events reported\n";
