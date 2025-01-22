@@ -87,7 +87,7 @@ void StompProtocol::closeConnection()
     _pConnection.release();
     _username.clear();
     _subscriptions.clear();
-    _loggedIn = false;
+    _loggedIn.store(false);
 }
 
 std::vector<Event> StompProtocol::getReportsFrom(const std::string &channel, const std::string &user)
@@ -108,7 +108,7 @@ std::vector<Event> StompProtocol::getReportsFrom(const std::string &channel, con
 
 void StompProtocol::login(const std::string &host, short port, const std::string &username, const std::string &password)
 {
-    if (_loggedIn)
+    if (_loggedIn.load())
         throw std::logic_error("Already logged in");
 
     if (_pConnection == nullptr)
@@ -125,7 +125,7 @@ void StompProtocol::login(const std::string &host, short port, const std::string
 
     if (response.type() == FrameType::CONNECTED) {
         std::cout << "Login successful\n";
-        _loggedIn = true;
+        _loggedIn.store(true);
         _username = username;
     } else {
         std::cout << response.getHeader("message") << '\n';
@@ -134,7 +134,7 @@ void StompProtocol::login(const std::string &host, short port, const std::string
 
 void StompProtocol::logout()
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
     
     int receipt = generateReceiptID();
@@ -152,7 +152,7 @@ void StompProtocol::logout()
 
 void StompProtocol::subscribe(const std::string &topic)
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
     if (_subscriptions.find(topic) != _subscriptions.end())
@@ -177,7 +177,7 @@ void StompProtocol::subscribe(const std::string &topic)
 
 void StompProtocol::unsubscribe(const std::string &topic)
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
     auto it = _subscriptions.find(topic);
@@ -203,7 +203,7 @@ void StompProtocol::unsubscribe(const std::string &topic)
 
 void StompProtocol::report(Event &event)
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
     int receipt = generateReceiptID();
@@ -222,7 +222,6 @@ void StompProtocol::report(Event &event)
         std::cout << "Error: reporting event failed\n"
                   << response.body() << '\n';
     }
-    
 }
 
 void StompProtocol::send(const Frame &frame)
@@ -334,4 +333,11 @@ size_t StompProtocol::generateSubscriptionID(const std::string &topic)
     std::string s = _username + topic;
     std::hash<std::string> hash;
     return hash(s);
+}
+
+void StompProtocol::receiveReports()
+{
+    while (_loggedIn) {
+
+    }
 }

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <atomic>
 
 #include "ConnectionHandler.h"
 #include "Event.h"
@@ -64,7 +65,7 @@ public:
     void report(Event& event);
 
 private:
-    bool _loggedIn;
+    std::atomic<bool> _loggedIn;
     std::string _username;
     std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
@@ -75,4 +76,6 @@ private:
 
     static int generateReceiptID();
     size_t generateSubscriptionID(const std::string& topic);
+
+    void receiveReports();
 };

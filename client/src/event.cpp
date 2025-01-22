@@ -202,38 +202,3 @@ Event::Event(const std::string &frame_body)
     if ((it = data.find("general information")) != data.end()) _generalInfo = parseGeneralInfo(it->second);
     if ((it = data.find("description")) != data.end()) _description = it->second;
 }
-
-names_and_events parseEventsFile(std::string json_path)
-{
-    std::ifstream f(json_path);
-    json data = json::parse(f);
-
-    std::string channel_name = data["channel_name"];
-    std::vector<Event> events;
-    
-    for (auto &event : data["events"]) {
-        std::string name = event["event_name"];
-        std::string city = event["city"];
-        int date_time = event["date_time"];
-        std::string description = event["description"];
-        std::map<std::string, std::string> general_information;
-
-        for (auto &update : event["general_information"].items()) {
-            if (update.value().is_string())
-                general_information[update.key()] = update.value();
-            else
-                general_information[update.key()] = update.value().dump();
-        }
-
-        events.emplace_back(
-            channel_name,
-            city,
-            name,
-            date_time,
-            description,
-            general_information
-        );
-    }
-
-    return {channel_name, events};
-}

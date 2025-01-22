@@ -38,12 +38,3 @@ private:
     static std::unordered_map<std::string, std::string> parseFrameBody(const std::string& frameBody);
     static std::map<std::string, std::string> parseGeneralInfo(const std::string& info);
 };
-
-// an object that holds the names of the teams and a vector of events, to be returned by the parseEventsFile function
-struct names_and_events {
-    std::string channelName;
-    std::vector<Event> events;
-};
-
-// function that parses the json file and returns a names_and_events object
-names_and_events parseEventsFile(std::string json_path);
