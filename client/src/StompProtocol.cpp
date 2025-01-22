@@ -4,6 +4,7 @@
 #include <sstream>
 #include <exception>
 #include <random>
+#include <thread>
 
 
 Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers)
@@ -79,6 +80,7 @@ StompProtocol::StompProtocol()
     , _pConnection()
     , _data()
     , _subscriptions()
+    , _mtxSocket()
 {
 }
 
@@ -118,15 +120,16 @@ void StompProtocol::login(const std::string &host, short port, const std::string
         if (!_pConnection->connect())
             return;
     }
-    
-    send(Frame::Connect(username, password));
 
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Connect(username, password));
 
     if (response.type() == FrameType::CONNECTED) {
         std::cout << "Login successful\n";
         _loggedIn.store(true);
         _username = username;
+
+        std::thread t(&StompProtocol::receiveReports, this);
+        t.detach();
     } else {
         std::cout << response.getHeader("message") << '\n';
     }
@@ -138,10 +141,8 @@ void StompProtocol::logout()
         throw std::logic_error("Not logged in");
     
     int receipt = generateReceiptID();
-    
-    send(Frame::Disconnect(receipt));
 
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Disconnect(receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -161,9 +162,7 @@ void StompProtocol::subscribe(const std::string &topic)
     size_t subID = generateSubscriptionID(topic);
     int receipt = generateReceiptID();
 
-    send(Frame::Subscribe(topic, subID, receipt));
-
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Subscribe(topic, subID, receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -187,9 +186,7 @@ void StompProtocol::unsubscribe(const std::string &topic)
 
     int receipt = generateReceiptID();
 
-    send(Frame::Unsubscribe(it->second, receipt));
-
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Unsubscribe(it->second, receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -211,16 +208,15 @@ void StompProtocol::report(Event &event)
     event.setEventOwnerUser(_username);
 
     std::cout << "reporting " << event.get_name() << '\n';
-    send(Frame::Send(event,receipt));
 
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Send(event,receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
         _data[event.get_channel_name()][event.getEventOwnerUser()].push_back(event);
     } else {
         std::cout << "Error: reporting event failed\n"
-                  << response.body() << '\n';
+                  << response.getHeader("message") << '\n';
     }
 }
 
@@ -232,6 +228,13 @@ void StompProtocol::send(const Frame &frame)
 Frame StompProtocol::recv()
 {
     return Frame::parseFrame(_pConnection->readFrame());
+}
+
+Frame StompProtocol::safeSendReceive(const Frame &frame)
+{
+    std::lock_guard<std::mutex> lck(_mtxSocket);
+    send(frame);
+    return recv();
 }
 
 const std::string& Frame::getFrameName(FrameType t)
@@ -337,7 +340,18 @@ size_t StompProtocol::generateSubscriptionID(const std::string &topic)
 
 void StompProtocol::receiveReports()
 {
-    while (_loggedIn) {
+    while (_loggedIn.load()) {
+        _pConnection->waitForData();
 
+        std::lock_guard<std::mutex> lck(_mtxSocket);
+
+        if (_pConnection->isDataAvailable()) {
+            Frame f = Frame::parseFrame(_pConnection->readFrame());
+
+            if (f.type() == FrameType::MESSAGE) {
+                Event e(f.body());
+                _data[e.get_channel_name()][e.getEventOwnerUser()].push_back(e);
+            }
+        }
     }
 }

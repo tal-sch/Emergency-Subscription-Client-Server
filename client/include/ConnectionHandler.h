@@ -3,7 +3,6 @@
 #include <string>
 #include <iostream>
 #include <boost/asio.hpp>
-#include <mutex>
 
 
 class ConnectionHandler
@@ -21,10 +20,12 @@ public:
 
 	bool isConnected() const;
 
+	void waitForData();
+	bool isDataAvailable();
+
 private:
 	const std::string _host;
 	const short _port;
 	boost::asio::io_service _ioService;
 	boost::asio::ip::tcp::socket _socket;
-	std::mutex _mtxSocket;
 };

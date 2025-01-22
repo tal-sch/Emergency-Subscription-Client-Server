@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <mutex>
 
 #include "ConnectionHandler.h"
 #include "Event.h"
@@ -70,9 +71,12 @@ private:
     std::unique_ptr<ConnectionHandler> _pConnection;
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
     std::unordered_map<std::string, size_t> _subscriptions;
+    std::mutex _mtxSocket;
 
     void send(const Frame& frame);
     Frame recv();
+
+    Frame safeSendReceive(const Frame& frame);
 
     static int generateReceiptID();
     size_t generateSubscriptionID(const std::string& topic);

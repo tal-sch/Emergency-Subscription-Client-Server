@@ -1,6 +1,7 @@
 #include "ConnectionHandler.h"
 
 #include <sstream>
+#include <iostream>
 
 
 ConnectionHandler::ConnectionHandler(std::string host, short port)
@@ -8,7 +9,6 @@ ConnectionHandler::ConnectionHandler(std::string host, short port)
 	, _port(port)
 	, _ioService()
 	, _socket(_ioService)
-	, _mtxSocket()
 {
 }
 
@@ -58,4 +58,15 @@ void ConnectionHandler::sendFrame(const std::string& data)
 bool ConnectionHandler::isConnected() const
 {
     return _socket.is_open();
+}
+
+void ConnectionHandler::waitForData()
+{
+	boost::system::error_code ec;
+	_socket.wait(boost::asio::socket_base::wait_read, ec);
+}
+
+bool ConnectionHandler::isDataAvailable()
+{
+    return isConnected() && _socket.available() > 0;
 }
