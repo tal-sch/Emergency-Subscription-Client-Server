@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <iostream>
+#include <ostream>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -20,6 +20,11 @@ public:
     const std::string &get_name() const;
     int get_date_time() const;
     const std::map<std::string, std::string> &get_general_information() const;
+
+    std::string summary() const;
+    std::string toString() const;
+
+    static std::vector<Event> fromJsonFile(const std::string& path);
     
 private:
     std::string _channelName; // name of channel
@@ -33,12 +38,3 @@ private:
     static std::unordered_map<std::string, std::string> parseFrameBody(const std::string& frameBody);
     static std::map<std::string, std::string> parseGeneralInfo(const std::string& info);
 };
-
-// an object that holds the names of the teams and a vector of events, to be returned by the parseEventsFile function
-struct names_and_events {
-    std::string channelName;
-    std::vector<Event> events;
-};
-
-// function that parses the json file and returns a names_and_events object
-names_and_events parseEventsFile(std::string json_path);

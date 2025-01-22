@@ -4,6 +4,7 @@
 #include <sstream>
 #include <exception>
 #include <random>
+#include <thread>
 
 
 Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers)
@@ -79,6 +80,7 @@ StompProtocol::StompProtocol()
     , _pConnection()
     , _data()
     , _subscriptions()
+    , _mtxSocket()
 {
 }
 
@@ -87,12 +89,28 @@ void StompProtocol::closeConnection()
     _pConnection.release();
     _username.clear();
     _subscriptions.clear();
-    _loggedIn = false;
+    _loggedIn.store(false);
+}
+
+std::vector<Event> StompProtocol::getReportsFrom(const std::string &channel, const std::string &user)
+{
+    auto channelIt = _data.find(channel);
+
+    if (channelIt == _data.end())
+        return std::vector<Event>();
+
+    auto channelData = channelIt->second;
+    auto userIt = channelData.find(user);
+
+    if (userIt == channelData.end())
+        return std::vector<Event>();
+
+    return userIt->second;
 }
 
 void StompProtocol::login(const std::string &host, short port, const std::string &username, const std::string &password)
 {
-    if (_loggedIn)
+    if (_loggedIn.load())
         throw std::logic_error("Already logged in");
 
     if (_pConnection == nullptr)
@@ -102,15 +120,16 @@ void StompProtocol::login(const std::string &host, short port, const std::string
         if (!_pConnection->connect())
             return;
     }
-    
-    send(Frame::Connect(username, password));
 
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Connect(username, password));
 
     if (response.type() == FrameType::CONNECTED) {
         std::cout << "Login successful\n";
-        _loggedIn = true;
+        _loggedIn.store(true);
         _username = username;
+
+        std::thread t(&StompProtocol::receiveReports, this);
+        t.detach();
     } else {
         std::cout << response.getHeader("message") << '\n';
     }
@@ -118,14 +137,12 @@ void StompProtocol::login(const std::string &host, short port, const std::string
 
 void StompProtocol::logout()
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
     
     int receipt = generateReceiptID();
-    
-    send(Frame::Disconnect(receipt));
 
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Disconnect(receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -136,7 +153,7 @@ void StompProtocol::logout()
 
 void StompProtocol::subscribe(const std::string &topic)
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
     if (_subscriptions.find(topic) != _subscriptions.end())
@@ -145,9 +162,7 @@ void StompProtocol::subscribe(const std::string &topic)
     size_t subID = generateSubscriptionID(topic);
     int receipt = generateReceiptID();
 
-    send(Frame::Subscribe(topic, subID, receipt));
-
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Subscribe(topic, subID, receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -161,7 +176,7 @@ void StompProtocol::subscribe(const std::string &topic)
 
 void StompProtocol::unsubscribe(const std::string &topic)
 {
-    if (!_loggedIn)
+    if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
     auto it = _subscriptions.find(topic);
@@ -171,9 +186,7 @@ void StompProtocol::unsubscribe(const std::string &topic)
 
     int receipt = generateReceiptID();
 
-    send(Frame::Unsubscribe(it->second, receipt));
-
-    Frame response = recv();
+    Frame response = safeSendReceive(Frame::Unsubscribe(it->second, receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
@@ -181,6 +194,28 @@ void StompProtocol::unsubscribe(const std::string &topic)
         _subscriptions.erase(it);
     } else {
         std::cout << "Could not exit channel '" << topic << "'\n"
+                  << response.getHeader("message") << '\n';
+    }
+}
+
+void StompProtocol::report(Event &event)
+{
+    if (!_loggedIn.load())
+        throw std::logic_error("Not logged in");
+
+    int receipt = generateReceiptID();
+
+    event.setEventOwnerUser(_username);
+
+    std::cout << "reporting " << event.get_name() << '\n';
+
+    Frame response = safeSendReceive(Frame::Send(event,receipt));
+
+    if (response.type() == FrameType::RECEIPT
+        && response.getHeader("receipt-id") == std::to_string(receipt)) {
+        _data[event.get_channel_name()][event.getEventOwnerUser()].push_back(event);
+    } else {
+        std::cout << "Error: reporting event failed\n"
                   << response.getHeader("message") << '\n';
     }
 }
@@ -193,6 +228,13 @@ void StompProtocol::send(const Frame &frame)
 Frame StompProtocol::recv()
 {
     return Frame::parseFrame(_pConnection->readFrame());
+}
+
+Frame StompProtocol::safeSendReceive(const Frame &frame)
+{
+    std::lock_guard<std::mutex> lck(_mtxSocket);
+    send(frame);
+    return recv();
 }
 
 const std::string& Frame::getFrameName(FrameType t)
@@ -273,6 +315,15 @@ Frame Frame::Unsubscribe(int id, int receipt)
     );
 }
 
+Frame Frame::Send(const Event &event, int receipt)
+{
+    return Frame(
+        FrameType::SEND,
+        {{"receipt", std::to_string(receipt)}, {"destination", "/" + event.get_channel_name()}},
+        event.toString()
+    );
+}
+
 int StompProtocol::generateReceiptID()
 {
     std::default_random_engine generator;
@@ -285,4 +336,22 @@ size_t StompProtocol::generateSubscriptionID(const std::string &topic)
     std::string s = _username + topic;
     std::hash<std::string> hash;
     return hash(s);
+}
+
+void StompProtocol::receiveReports()
+{
+    while (_loggedIn.load()) {
+        _pConnection->waitForData();
+
+        std::lock_guard<std::mutex> lck(_mtxSocket);
+
+        if (_pConnection->isDataAvailable()) {
+            Frame f = Frame::parseFrame(_pConnection->readFrame());
+
+            if (f.type() == FrameType::MESSAGE) {
+                Event e(f.body());
+                _data[e.get_channel_name()][e.getEventOwnerUser()].push_back(e);
+            }
+        }
+    }
 }

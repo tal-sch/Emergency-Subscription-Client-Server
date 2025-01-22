@@ -1,12 +1,11 @@
 #include "Event.h"
 
-#include <iostream>
 #include <fstream>
 #include <string>
 #include <map>
 #include <vector>
 #include <sstream>
-#include <cstring>
+#include <iostream>
 
 #include "json.hpp"
 
@@ -65,6 +64,29 @@ const std::map<std::string, std::string> &Event::get_general_information() const
     return _generalInfo;
 }
 
+std::string Event::summary() const
+{
+    std::string summary = _description.substr(0, 27);
+    if (summary.length() < _description.length()) summary.append("...");
+    return summary;
+}
+
+std::string Event::toString() const
+{
+    std::ostringstream stream;
+
+    stream << "user: " << _eventOwner << '\n'
+           << "city: " << _city << '\n'
+           << "event name: " << _name << '\n'
+           << "date time: " << _datetime << '\n'
+           << "general information:\n"
+                << "\tactive: " << _generalInfo.at("active") << '\n'
+                << "\tforces_arrival_at_scene: " << _generalInfo.at("forces_arrival_at_scene") << '\n'
+           << "description: " << _description;
+
+    return stream.str();
+}
+
 std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::string &frameBody)
 {
     std::istringstream stream(frameBody);
@@ -120,6 +142,40 @@ std::map<std::string, std::string> Event::parseGeneralInfo(const std::string &in
     return data;
 }
 
+std::vector<Event> Event::fromJsonFile(const std::string &path)
+{
+    std::vector<Event> events;
+    std::ifstream f(path);
+
+    if (!f.is_open()) {
+        std::cerr << "Could not open file '" << path << "'\n";
+        return events;
+    }
+
+    json data = json::parse(f);
+    std::string channel_name = data["channel_name"];
+
+    for (auto& event : data["events"]) {
+        std::map<std::string, std::string> general_information;
+
+        for (auto& field : event["general_information"].items()) {
+            general_information[field.key()] = (field.value().is_string())
+                ? (std::string)field.value() : field.value().dump();
+        }
+
+        events.emplace_back(
+            channel_name,
+            event["city"],
+            event["event_name"],
+            event["date_time"],
+            event["description"],
+            general_information
+        );
+    }
+    
+    return events; 
+}
+
 const std::string &Event::get_description() const
 {
     return _description;
@@ -145,39 +201,4 @@ Event::Event(const std::string &frame_body)
     if ((it = data.find("date time")) != data.end()) _datetime = std::stoi(it->second);
     if ((it = data.find("general information")) != data.end()) _generalInfo = parseGeneralInfo(it->second);
     if ((it = data.find("description")) != data.end()) _description = it->second;
-}
-
-names_and_events parseEventsFile(std::string json_path)
-{
-    std::ifstream f(json_path);
-    json data = json::parse(f);
-
-    std::string channel_name = data["channel_name"];
-    std::vector<Event> events;
-    
-    for (auto &event : data["events"]) {
-        std::string name = event["event_name"];
-        std::string city = event["city"];
-        int date_time = event["date_time"];
-        std::string description = event["description"];
-        std::map<std::string, std::string> general_information;
-
-        for (auto &update : event["general_information"].items()) {
-            if (update.value().is_string())
-                general_information[update.key()] = update.value();
-            else
-                general_information[update.key()] = update.value().dump();
-        }
-
-        events.emplace_back(
-            channel_name,
-            city,
-            name,
-            date_time,
-            description,
-            general_information
-        );
-    }
-
-    return {channel_name, events};
 }
