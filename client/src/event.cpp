@@ -75,14 +75,14 @@ std::string Event::toString() const
 {
     std::ostringstream stream;
 
-    stream << "user: " << _eventOwner << '\n'
-           << "city: " << _city << '\n'
-           << "event name: " << _name << '\n'
-           << "date time: " << _datetime << '\n'
+    stream << "user:" << _eventOwner << '\n'
+           << "city:" << _city << '\n'
+           << "event name:" << _name << '\n'
+           << "date time:" << _datetime << '\n'
            << "general information:\n"
-                << "\tactive: " << _generalInfo.at("active") << '\n'
-                << "\tforces_arrival_at_scene: " << _generalInfo.at("forces_arrival_at_scene") << '\n'
-           << "description: " << _description;
+                << "\tactive:" << _generalInfo.at("active") << '\n'
+                << "\tforces_arrival_at_scene:" << _generalInfo.at("forces_arrival_at_scene") << '\n'
+           << "description:" << _description;
 
     return stream.str();
 }
@@ -119,7 +119,7 @@ std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::st
                 break;
             }
 
-            data[key] = line.substr(colonPos + 2);
+            data[key] = line.substr(colonPos + 1);
         }
     }
 
@@ -136,7 +136,7 @@ std::map<std::string, std::string> Event::parseGeneralInfo(const std::string &in
         size_t colonPos = line.find(':');
 
         if (colonPos != std::string::npos)
-            data[line.substr(0, colonPos)] = line.substr(colonPos + 2);
+            data[line.substr(0, colonPos)] = line.substr(colonPos + 1);
     }
 
     return data;

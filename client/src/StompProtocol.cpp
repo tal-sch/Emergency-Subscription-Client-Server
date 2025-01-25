@@ -372,7 +372,7 @@ Frame Frame::Send(const Event &event, int receipt)
 {
     return Frame(
         FrameType::SEND,
-        {{"receipt", std::to_string(receipt)}, {"destination", event.get_channel_name()}},
+        {{"receipt", std::to_string(receipt)}, {"destination", '/' + event.get_channel_name()}},
         event.toString()
     );
 }
@@ -401,8 +401,9 @@ void StompProtocol::reportCallback(const boost::system::error_code& ec)
 
             if (f.type() == FrameType::MESSAGE) {
                 Event e(f.body());
+                std::string channelName = f.getHeader("destination").substr(1);
                 std::lock_guard<std::mutex> lckData(_mtxData);
-                _data[e.get_channel_name()][e.getEventOwnerUser()].push_back(e);
+                _data[channelName][e.getEventOwnerUser()].push_back(e);
                 std::cout << "Received report!\n";
             }
         }
