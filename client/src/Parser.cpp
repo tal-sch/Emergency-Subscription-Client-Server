@@ -7,13 +7,14 @@
 #include <exception>
 #include <ctime>
 #include <iomanip>
+#include <set>
 
 using Command = void (*)(const std::vector<std::string>&, StompProtocol&);
 
 bool Parser::_sQuit = false;
 
 
-bool Parser::quitApp()
+bool Parser::shouldQuit()
 {
     return _sQuit;
 }
@@ -50,6 +51,11 @@ void Parser::parseCommand(const std::string &input, StompProtocol &protocol)
 
     try {
         (*it->second.first)(args, protocol);
+
+    } catch (boost::system::system_error& e) {
+        std::cerr << "Socket Error: " << e.what() << '\n';
+        protocol.closeConnection();
+
     } catch (std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
     }
@@ -70,12 +76,19 @@ void Parser::writeSummary(const std::string &fileName, const std::vector<Event> 
     size_t activeCount = 0;
     size_t forcesArrivalCount = 0;
 
+    static const auto cmp = [](const Event& a, const Event& b) {
+        return a.get_date_time() < b.get_date_time();
+    };
+
+    std::set<Event, decltype(cmp)> sortedReports(cmp);
+
     for (const Event& report : reports) {
         const std::map<std::string, std::string>& info = report.get_general_information();
         bool active = (info.at("active") == "true") ? true : false;
         bool forcesArrival = (info.at("forces_arrival_at_scene") == "true") ? true : false;
         if (active) ++activeCount;
         if (forcesArrival) ++forcesArrivalCount;
+        sortedReports.insert(report);
     }
 
     std::ofstream f(fileName);
@@ -87,16 +100,17 @@ void Parser::writeSummary(const std::string &fileName, const std::vector<Event> 
 
     f << "Event Reports:\n\n";
 
-    for (size_t i = 0; i < reports.size(); ++i) {
-        const Event& report = reports[i];
+    int counter = 1;
 
-        f << "Report_" << i + 1 << ":\n\t"
+    for (const Event& report : sortedReports) {
+        f << "Report_" << counter << ":\n\t"
           << "city: " << report.get_city() << "\n\t"
           << "date time: " << epochToString(report.get_date_time()) << "\n\t"
           << "event name: " << report.get_name() << "\n\t"
           << "summary: " << report.summary() << '\n';
 
         f << '\n';
+        ++counter;
     }
 }
 

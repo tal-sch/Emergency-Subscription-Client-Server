@@ -3,11 +3,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <memory>
 #include <atomic>
 #include <mutex>
+#include <boost/asio.hpp>
 
-#include "ConnectionHandler.h"
 #include "Event.h"
 
 
@@ -55,8 +54,10 @@ class StompProtocol
 {
 public:
     StompProtocol();
-
+    ~StompProtocol();
+    
     void closeConnection();
+    void closeConnectionLogout();
     std::vector<Event> getReportsFrom(const std::string& channel, const std::string& user);
 
     void login(const std::string& host, short port, const std::string& username, const std::string& password);
@@ -66,20 +67,25 @@ public:
     void report(Event& event);
 
 private:
-    std::atomic<bool> _loggedIn;
-    std::string _username;
-    std::unique_ptr<ConnectionHandler> _pConnection;
-    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
-    std::unordered_map<std::string, size_t> _subscriptions;
+    boost::asio::io_context _ioContext;
+    boost::asio::ip::tcp::socket _socket;
     std::mutex _mtxSocket;
 
+
+    std::atomic<bool> _loggedIn;
+    std::string _username;
+    std::unordered_map<std::string, size_t> _subscriptions;
+    
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<Event>>> _data;
+    std::mutex _mtxData;
+    
     void send(const Frame& frame);
     Frame recv();
-
     Frame safeSendReceive(const Frame& frame);
+
+    void reportCallback(const boost::system::error_code& ec);
 
     static int generateReceiptID();
     size_t generateSubscriptionID(const std::string& topic);
 
-    void receiveReports();
 };

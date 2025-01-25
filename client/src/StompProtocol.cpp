@@ -5,6 +5,8 @@
 #include <exception>
 #include <random>
 #include <thread>
+#include <iostream>
+#include <boost/bind.hpp>
 
 
 Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers)
@@ -75,25 +77,42 @@ Frame Frame::parseFrame(const std::string &frame)
 }
 
 StompProtocol::StompProtocol()
-    : _loggedIn(false)
-    , _username()
-    , _pConnection()
-    , _data()
-    , _subscriptions()
+    : _ioContext()
+    , _socket(_ioContext)
     , _mtxSocket()
+    , _loggedIn(false)
+    , _username()
+    , _subscriptions()
+    , _data()
+    , _mtxData()
 {
+}
+
+StompProtocol::~StompProtocol()
+{
+    closeConnectionLogout();
 }
 
 void StompProtocol::closeConnection()
 {
-    _pConnection.release();
+    boost::system::error_code ec;
+    _loggedIn.store(false);
+    _socket.cancel(ec);
+    _socket.close(ec);
     _username.clear();
     _subscriptions.clear();
-    _loggedIn.store(false);
+}
+
+void StompProtocol::closeConnectionLogout()
+{
+    boost::system::error_code ec;
+    _socket.send(boost::asio::buffer(Frame::Disconnect(0).raw()), 0, ec);
+    closeConnection();
 }
 
 std::vector<Event> StompProtocol::getReportsFrom(const std::string &channel, const std::string &user)
 {
+    std::lock_guard<std::mutex> lck(_mtxData);
     auto channelIt = _data.find(channel);
 
     if (channelIt == _data.end())
@@ -113,12 +132,20 @@ void StompProtocol::login(const std::string &host, short port, const std::string
     if (_loggedIn.load())
         throw std::logic_error("Already logged in");
 
-    if (_pConnection == nullptr)
-        _pConnection = std::unique_ptr<ConnectionHandler>(new ConnectionHandler(host, port));
-    
-    if (!_pConnection->isConnected()) {
-        if (!_pConnection->connect())
+    if (!_socket.is_open()) {
+        boost::asio::ip::tcp::endpoint ep(
+		    boost::asio::ip::address::from_string(host),
+		    port
+        );
+
+        boost::system::error_code ec;
+        _socket.connect(ep, ec);
+
+        if (ec) {
+            std::cerr << "Server is not running\n";
+            _socket.close();
             return;
+        }
     }
 
     Frame response = safeSendReceive(Frame::Connect(username, password));
@@ -128,10 +155,14 @@ void StompProtocol::login(const std::string &host, short port, const std::string
         _loggedIn.store(true);
         _username = username;
 
-        std::thread t(&StompProtocol::receiveReports, this);
-        t.detach();
+        _socket.async_wait(
+            boost::asio::socket_base::wait_read,
+            boost::bind(&StompProtocol::reportCallback, this, boost::asio::placeholders::error)
+        );
+
     } else {
         std::cout << response.getHeader("message") << '\n';
+        _socket.close();
     }
 }
 
@@ -147,8 +178,11 @@ void StompProtocol::logout()
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
         std::cout << "Logout successful\n";
-        closeConnection();
+    } else {
+        std::cout << "Server did not respond, closing connection anyway\n";
     }
+
+    closeConnection();
 }
 
 void StompProtocol::subscribe(const std::string &topic)
@@ -209,10 +243,11 @@ void StompProtocol::report(Event &event)
 
     std::cout << "reporting " << event.get_name() << '\n';
 
-    Frame response = safeSendReceive(Frame::Send(event,receipt));
+    Frame response = safeSendReceive(Frame::Send(event, receipt));
 
     if (response.type() == FrameType::RECEIPT
         && response.getHeader("receipt-id") == std::to_string(receipt)) {
+        std::lock_guard<std::mutex> lck(_mtxData);
         _data[event.get_channel_name()][event.getEventOwnerUser()].push_back(event);
     } else {
         std::cout << "Error: reporting event failed\n"
@@ -222,12 +257,30 @@ void StompProtocol::report(Event &event)
 
 void StompProtocol::send(const Frame &frame)
 {
-    _pConnection->sendFrame(frame.raw());
+    boost::system::error_code ec;
+    _socket.send(boost::asio::buffer(frame.raw()), 0, ec);
+
+    if (ec) {
+        std::cerr << "Socket Error: " << ec.message() << '\n';
+        closeConnection();
+    }
 }
 
 Frame StompProtocol::recv()
 {
-    return Frame::parseFrame(_pConnection->readFrame());
+    boost::system::error_code ec;
+    boost::asio::streambuf buffer;
+
+	boost::asio::read_until(_socket, buffer, '\0', ec);
+
+    if (ec) {
+        std::cerr << "Socket Error: " << ec.message() << '\n';
+        closeConnection();
+        throw std::runtime_error("");
+    }
+
+	std::string rawFrame = std::string(std::istreambuf_iterator<char>(&buffer), std::istreambuf_iterator<char>());
+    return Frame::parseFrame(rawFrame);
 }
 
 Frame StompProtocol::safeSendReceive(const Frame &frame)
@@ -319,7 +372,7 @@ Frame Frame::Send(const Event &event, int receipt)
 {
     return Frame(
         FrameType::SEND,
-        {{"receipt", std::to_string(receipt)}, {"destination", "/" + event.get_channel_name()}},
+        {{"receipt", std::to_string(receipt)}, {"destination", event.get_channel_name()}},
         event.toString()
     );
 }
@@ -338,20 +391,25 @@ size_t StompProtocol::generateSubscriptionID(const std::string &topic)
     return hash(s);
 }
 
-void StompProtocol::receiveReports()
+void StompProtocol::reportCallback(const boost::system::error_code& ec)
 {
-    while (_loggedIn.load()) {
-        _pConnection->waitForData();
+    if (_loggedIn.load()) {
+        std::lock_guard<std::mutex> lckSocket(_mtxSocket);
 
-        std::lock_guard<std::mutex> lck(_mtxSocket);
-
-        if (_pConnection->isDataAvailable()) {
-            Frame f = Frame::parseFrame(_pConnection->readFrame());
+        if (_socket.is_open() && _socket.available() > 0) {
+            Frame f = recv();
 
             if (f.type() == FrameType::MESSAGE) {
                 Event e(f.body());
+                std::lock_guard<std::mutex> lckData(_mtxData);
                 _data[e.get_channel_name()][e.getEventOwnerUser()].push_back(e);
+                std::cout << "Received report!\n";
             }
         }
+
+        _socket.async_wait(
+            boost::asio::socket_base::wait_read,
+            boost::bind(&StompProtocol::reportCallback, this, boost::asio::placeholders::error)
+        );
     }
 }

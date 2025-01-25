@@ -11,7 +11,7 @@
 class Parser
 {
 public:
-    static bool quitApp();
+    static bool shouldQuit();
     static void parseCommand(const std::string&, StompProtocol&);
 
 private:
