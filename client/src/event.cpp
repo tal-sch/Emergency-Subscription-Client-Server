@@ -34,6 +34,11 @@ void Event::setEventOwnerUser(std::string setEventOwnerUser)
     _eventOwner = setEventOwnerUser;
 }
 
+void Event::setChannelName(const std::string &channelName)
+{
+    _channelName = channelName;
+}
+
 const std::string &Event::getEventOwnerUser() const
 {
     return _eventOwner;
@@ -113,7 +118,7 @@ std::unordered_map<std::string, std::string> Event::parseFrameBody(const std::st
             }
 
             if (key == "description") {
-                std::string description;
+                std::string description = line.substr(colonPos + 1);
                 while (std::getline(stream, line)) description.append(line + '\n');
                 data[key] = description;
                 break;

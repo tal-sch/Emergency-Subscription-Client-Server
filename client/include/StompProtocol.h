@@ -5,6 +5,7 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
+#include <memory>
 #include <boost/asio.hpp>
 
 #include "Event.h"
@@ -39,6 +40,7 @@ public:
     static Frame Disconnect(int receipt);
     static Frame Subscribe(const std::string& topic, int id, int receipt);
     static Frame Unsubscribe(int id, int receipt);
+    static Frame Send(const Event& event);
     static Frame Send(const Event& event, int receipt);
     
 private:
@@ -70,7 +72,7 @@ private:
     boost::asio::io_context _ioContext;
     boost::asio::ip::tcp::socket _socket;
     std::mutex _mtxSocket;
-
+    std::unique_ptr<Frame> _pLastFrame;
 
     std::atomic<bool> _loggedIn;
     std::string _username;
@@ -80,10 +82,13 @@ private:
     std::mutex _mtxData;
     
     void send(const Frame& frame);
-    Frame recv();
-    Frame safeSendReceive(const Frame& frame);
+    std::string readFrame();
 
-    void reportCallback(const boost::system::error_code& ec);
+    void receiveMessages();
+    
+    void handleConnected(Frame f);
+    void handleReceipt(Frame f);
+    void handleMessage(Frame f);
 
     static int generateReceiptID();
     size_t generateSubscriptionID(const std::string& topic);

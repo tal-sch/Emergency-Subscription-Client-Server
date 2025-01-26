@@ -13,6 +13,7 @@ public:
     Event(std::string channel_name, std::string city, std::string name, int date_time, std::string description, std::map<std::string, std::string> general_information);
     Event(const std::string & frame_body);
     void setEventOwnerUser(std::string setEventOwnerUser);
+    void setChannelName(const std::string& channelName);
     const std::string &getEventOwnerUser() const;
     const std::string &get_channel_name() const;
     const std::string &get_city() const;

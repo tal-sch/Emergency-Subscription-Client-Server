@@ -6,7 +6,7 @@
 #include <random>
 #include <thread>
 #include <iostream>
-#include <boost/bind.hpp>
+#include <algorithm>
 
 
 Frame::Frame(FrameType type, const std::unordered_map<std::string, std::string> &headers)
@@ -80,6 +80,7 @@ StompProtocol::StompProtocol()
     : _ioContext()
     , _socket(_ioContext)
     , _mtxSocket()
+    , _pLastFrame()
     , _loggedIn(false)
     , _username()
     , _subscriptions()
@@ -89,24 +90,23 @@ StompProtocol::StompProtocol()
 }
 
 StompProtocol::~StompProtocol()
-{
-    closeConnectionLogout();
+{   
+    closeConnection();
 }
 
 void StompProtocol::closeConnection()
 {
     boost::system::error_code ec;
-    _loggedIn.store(false);
-    _socket.cancel(ec);
     _socket.close(ec);
+    _loggedIn.store(false);
     _username.clear();
     _subscriptions.clear();
+    _pLastFrame.reset();
 }
 
 void StompProtocol::closeConnectionLogout()
 {
-    boost::system::error_code ec;
-    _socket.send(boost::asio::buffer(Frame::Disconnect(0).raw()), 0, ec);
+    logout();
     closeConnection();
 }
 
@@ -148,22 +148,10 @@ void StompProtocol::login(const std::string &host, short port, const std::string
         }
     }
 
-    Frame response = safeSendReceive(Frame::Connect(username, password));
+    send(Frame::Connect(username, password));
 
-    if (response.type() == FrameType::CONNECTED) {
-        std::cout << "Login successful\n";
-        _loggedIn.store(true);
-        _username = username;
-
-        _socket.async_wait(
-            boost::asio::socket_base::wait_read,
-            boost::bind(&StompProtocol::reportCallback, this, boost::asio::placeholders::error)
-        );
-
-    } else {
-        std::cout << response.getHeader("message") << '\n';
-        _socket.close();
-    }
+    std::thread reader(&StompProtocol::receiveMessages, this);
+    reader.detach();
 }
 
 void StompProtocol::logout()
@@ -171,18 +159,7 @@ void StompProtocol::logout()
     if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
     
-    int receipt = generateReceiptID();
-
-    Frame response = safeSendReceive(Frame::Disconnect(receipt));
-
-    if (response.type() == FrameType::RECEIPT
-        && response.getHeader("receipt-id") == std::to_string(receipt)) {
-        std::cout << "Logout successful\n";
-    } else {
-        std::cout << "Server did not respond, closing connection anyway\n";
-    }
-
-    closeConnection();
+    send(Frame::Disconnect(generateReceiptID()));
 }
 
 void StompProtocol::subscribe(const std::string &topic)
@@ -193,19 +170,7 @@ void StompProtocol::subscribe(const std::string &topic)
     if (_subscriptions.find(topic) != _subscriptions.end())
         throw std::invalid_argument("Already subscribed to '" + topic + '\'');
 
-    size_t subID = generateSubscriptionID(topic);
-    int receipt = generateReceiptID();
-
-    Frame response = safeSendReceive(Frame::Subscribe(topic, subID, receipt));
-
-    if (response.type() == FrameType::RECEIPT
-        && response.getHeader("receipt-id") == std::to_string(receipt)) {
-        std::cout << "Joined channel '" << topic << "'\n";
-        _subscriptions[topic] = subID;
-    } else {
-        std::cout << "Could not join channel '" << topic << "'\n"
-                  << response.getHeader("message") << '\n';
-    }
+    send(Frame::Subscribe(topic, generateSubscriptionID(topic), generateReceiptID()));
 }
 
 void StompProtocol::unsubscribe(const std::string &topic)
@@ -218,18 +183,9 @@ void StompProtocol::unsubscribe(const std::string &topic)
     if (it == _subscriptions.end())
         throw std::invalid_argument("Not subscribed to '" + topic + '\'');
 
-    int receipt = generateReceiptID();
-
-    Frame response = safeSendReceive(Frame::Unsubscribe(it->second, receipt));
-
-    if (response.type() == FrameType::RECEIPT
-        && response.getHeader("receipt-id") == std::to_string(receipt)) {
-        std::cout << "Exited channel '" << topic << "'\n";
-        _subscriptions.erase(it);
-    } else {
-        std::cout << "Could not exit channel '" << topic << "'\n"
-                  << response.getHeader("message") << '\n';
-    }
+    send(Frame::Unsubscribe(it->second, generateReceiptID()));
+    _subscriptions.erase(it);
+    std::cout << "Exited '" << topic << "'\n";
 }
 
 void StompProtocol::report(Event &event)
@@ -237,22 +193,11 @@ void StompProtocol::report(Event &event)
     if (!_loggedIn.load())
         throw std::logic_error("Not logged in");
 
-    int receipt = generateReceiptID();
+    if (_subscriptions.find(event.get_channel_name()) == _subscriptions.end())
+        throw std::invalid_argument("Not subscribed to '" + event.get_channel_name() + '\'');
 
     event.setEventOwnerUser(_username);
-
-    std::cout << "reporting " << event.get_name() << '\n';
-
-    Frame response = safeSendReceive(Frame::Send(event, receipt));
-
-    if (response.type() == FrameType::RECEIPT
-        && response.getHeader("receipt-id") == std::to_string(receipt)) {
-        std::lock_guard<std::mutex> lck(_mtxData);
-        _data[event.get_channel_name()][event.getEventOwnerUser()].push_back(event);
-    } else {
-        std::cout << "Error: reporting event failed\n"
-                  << response.getHeader("message") << '\n';
-    }
+    send(Frame::Send(event));
 }
 
 void StompProtocol::send(const Frame &frame)
@@ -264,30 +209,100 @@ void StompProtocol::send(const Frame &frame)
         std::cerr << "Socket Error: " << ec.message() << '\n';
         closeConnection();
     }
+
+    _pLastFrame.reset(new Frame(frame));
 }
 
-Frame StompProtocol::recv()
+std::string StompProtocol::readFrame()
 {
-    boost::system::error_code ec;
-    boost::asio::streambuf buffer;
+    std::string frame;
+    char c;
 
-	boost::asio::read_until(_socket, buffer, '\0', ec);
+    do {
+        _socket.read_some(boost::asio::buffer(&c, 1));
+        frame.append(1, c);
+    } while (c != '\0');
 
-    if (ec) {
-        std::cerr << "Socket Error: " << ec.message() << '\n';
-        closeConnection();
-        throw std::runtime_error("");
+    frame.pop_back();
+    return frame;
+}
+
+void StompProtocol::receiveMessages()
+{
+    do {
+        try {
+            Frame f = Frame::parseFrame(readFrame());
+
+            switch (f.type()) {
+                case FrameType::CONNECTED:
+                    handleConnected(f);
+                    break;
+
+                case FrameType::RECEIPT:
+                    handleReceipt(f);
+                    break;
+
+                case FrameType::MESSAGE:
+                    handleMessage(f);
+                    break;
+
+                case FrameType::ERROR:
+                    std::cout << f.getHeader("message") << '\n';
+                    break;
+
+                default:
+                    std::cerr << "Unhandled frame received: " << (int)f.type() << '\n';
+                    break;
+            }
+        } catch (std::exception& e) {
+            std::cerr << e.what() << '\n';
+        }
+    } while (_loggedIn.load());
+}
+
+void StompProtocol::handleConnected(Frame f)
+{
+    std::cout << "Login successful\n";
+    _loggedIn.store(true);
+    _username = _pLastFrame->getHeader("login");
+}
+
+void StompProtocol::handleReceipt(Frame f)
+{
+    if (f.getHeader("receipt-id") != _pLastFrame->getHeader("receipt"))
+        return;
+
+    std::string channel;
+
+    switch (_pLastFrame->type()) {
+        case FrameType::DISCONNECT:
+            std::cout << "Logout successful\n";
+            closeConnection();
+            break;
+
+        case FrameType::SUBSCRIBE:
+            channel = _pLastFrame->getHeader("destination");
+            std::cout << "Subscribed to '" << channel << "'\n";
+            _subscriptions[channel] = std::stoi(_pLastFrame->getHeader("id"));
+            break;
+
+        case FrameType::UNSUBSCRIBE:
+            // already handled
+            break;
+
+        default:
+            std::cout << "Received receipt of unknown purpose\n";
+            break;
     }
-
-	std::string rawFrame = std::string(std::istreambuf_iterator<char>(&buffer), std::istreambuf_iterator<char>());
-    return Frame::parseFrame(rawFrame);
 }
 
-Frame StompProtocol::safeSendReceive(const Frame &frame)
+void StompProtocol::handleMessage(Frame f)
 {
-    std::lock_guard<std::mutex> lck(_mtxSocket);
-    send(frame);
-    return recv();
+    Event e(f.body());
+    std::string channelName = f.getHeader("destination").substr(1);
+    e.setChannelName(channelName);
+    std::lock_guard<std::mutex> lck(_mtxData);
+    _data[channelName][e.getEventOwnerUser()].push_back(e);
 }
 
 const std::string& Frame::getFrameName(FrameType t)
@@ -377,6 +392,15 @@ Frame Frame::Send(const Event &event, int receipt)
     );
 }
 
+Frame Frame::Send(const Event &event)
+{
+    return Frame(
+        FrameType::SEND,
+        {{"destination", '/' + event.get_channel_name()}},
+        event.toString()
+    );
+}
+
 int StompProtocol::generateReceiptID()
 {
     std::default_random_engine generator;
@@ -389,28 +413,4 @@ size_t StompProtocol::generateSubscriptionID(const std::string &topic)
     std::string s = _username + topic;
     std::hash<std::string> hash;
     return hash(s);
-}
-
-void StompProtocol::reportCallback(const boost::system::error_code& ec)
-{
-    if (_loggedIn.load()) {
-        std::lock_guard<std::mutex> lckSocket(_mtxSocket);
-
-        if (_socket.is_open() && _socket.available() > 0) {
-            Frame f = recv();
-
-            if (f.type() == FrameType::MESSAGE) {
-                Event e(f.body());
-                std::string channelName = f.getHeader("destination").substr(1);
-                std::lock_guard<std::mutex> lckData(_mtxData);
-                _data[channelName][e.getEventOwnerUser()].push_back(e);
-                std::cout << "Received report!\n";
-            }
-        }
-
-        _socket.async_wait(
-            boost::asio::socket_base::wait_read,
-            boost::bind(&StompProtocol::reportCallback, this, boost::asio::placeholders::error)
-        );
-    }
 }
