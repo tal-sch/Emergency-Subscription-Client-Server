@@ -254,6 +254,9 @@ void StompProtocol::receiveMessages()
                     std::cerr << "Unhandled frame received: " << (int)f.type() << '\n';
                     break;
             }
+        } catch (boost::system::system_error& e) {
+            std::cerr << e.what() << '\n';
+            closeConnection();
         } catch (std::exception& e) {
             std::cerr << e.what() << '\n';
         }
