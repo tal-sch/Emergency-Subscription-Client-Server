@@ -6,9 +6,9 @@ import java.util.StringJoiner;
 public class Frame {
 
 
-    private final String command;
-    private final HashMap<String, String> headers;
-    private final String body;
+    private String command;
+    private HashMap<String, String> headers;
+    private String body;
 
     public Frame(String command, HashMap<String, String> headers, String body) {
         this.command = command;
@@ -30,6 +30,14 @@ public class Frame {
 
     public void addHeader(String key, String value) {
         headers.put(key, value);
+    }
+
+    public void setCommand(String command){
+        this.command = command;
+    }
+
+    public void setHeaders(HashMap<String, String> headers){
+        this.headers = headers;
     }
 
     @Override

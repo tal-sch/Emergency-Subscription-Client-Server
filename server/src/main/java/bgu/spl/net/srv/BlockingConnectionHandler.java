@@ -50,7 +50,6 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
     @Override
     public void close() throws IOException {
         connected = false;
-        System.out.println("Closing connection: " + sock.getRemoteSocketAddress());
         sock.close();
     }
 

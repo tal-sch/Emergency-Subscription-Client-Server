@@ -54,61 +54,95 @@ public class StompProtocol implements StompMessagingProtocol<Frame> {
         String username = msg.getHeaders().get("login");
         String password = msg.getHeaders().get("passcode");
     
+        // Missing username or password
         if (username == null || password == null) {
             HashMap<String, String> errorHeaders = new HashMap<>();
             errorHeaders.put("message", "Missing 'username' or 'password' header in CONNECT frame");
             Frame errorFrame = new Frame("ERROR", errorHeaders, "");
             connections.send(connectionId, errorFrame);
-            terminate = true;
-            return;
+            return; 
         }
     
+        // User already logged in
         if (connections.isUserActive(username)) {
             HashMap<String, String> errorHeaders = new HashMap<>();
             errorHeaders.put("message", "User already logged in");
             Frame errorFrame = new Frame("ERROR", errorHeaders, "");
             connections.send(connectionId, errorFrame);
-            terminate = true;
-            return;
+            return; 
         }
     
-        if (!connections.authenticateUser(username, password)) {
+        // User exists but incorrect password
+        if (connections.checkUsername(username) && !connections.getPasscode(username).equals(password)) {
+            HashMap<String, String> errorHeaders = new HashMap<>();
+            errorHeaders.put("message", "Incorrect passcode");
+            Frame errorFrame = new Frame("ERROR", errorHeaders, "");
+            connections.send(connectionId, errorFrame);
+            return; 
+        }
+    
+        // New user creation
+        if (!connections.checkUsername(username)) {
             connections.addUserCredentials(username, password);
         }
     
+        // Successful login
         Frame response = ProcessConnect(msg);
         if (response.getCommand().equals("ERROR")) {
             connections.send(connectionId, response);
-            terminate = true;
         } else {
             connections.addActiveUser(connectionId, username);
             connections.send(connectionId, response);
-            System.out.println("User " + username + " logged in successfully.");
-            System.out.println("Sent CONNECTED frame: " + response.toString());
         }
     }
     
+    
+    
 
     private void handleSend(Frame msg) {
-        Frame response = ProcessSend(msg);
-        if (response.getCommand().equals("ERROR")){
-            connections.send(connectionId, response);
-            terminate = true; 
+        String destination = msg.getHeaders().get("destination");
+    
+        // Normalize the destination to remove leading `/`
+        if (destination != null && destination.startsWith("/")) {
+            destination = destination.substring(1);
         }
-        else{
+    
+        if (destination == null || destination.isEmpty()) {
+            HashMap<String, String> errorHeaders = new HashMap<>();
+            errorHeaders.put("message", "Missing or empty 'destination' header");
+            Frame errorFrame = new Frame("ERROR", errorHeaders, "");
+            connections.send(connectionId, errorFrame);
+            return;
+        }
+    
+        if (!connections.isSubscribed(destination, connectionId)) {
+            HashMap<String, String> errorHeaders = new HashMap<>();
+            errorHeaders.put("message", "Not subscribed to the given topic");
+            Frame errorFrame = new Frame("ERROR", errorHeaders, "");
+            connections.send(connectionId, errorFrame);
+            return;
+        }
+    
+        Frame response = ProcessSend(msg);
+        if (!response.getCommand().equals("ERROR")) {
+            connections.send(destination, msg);
+        } else {
             connections.send(connectionId, response);
         }
     }
+    
+    
+    
 
     private void handleSubscribe(Frame msg) {
         Frame response = ProcessSubscribe(msg);
     
         if (response.getCommand().equals("ERROR")) {
             connections.send(connectionId, response);
-            terminate = true;
         } else {
             String destination = msg.getHeaders().get("destination");
-            connections.subscribeToTopic(connectionId, destination);
+            String subscriptionId = msg.getHeaders().get("id");
+            connections.subscribeToTopic(connectionId, destination, subscriptionId);
             String receiptId = msg.getHeaders().get("receipt");
             if (receiptId != null) {
                 HashMap<String, String> receiptHeaders = new HashMap<>();
@@ -152,8 +186,8 @@ public class StompProtocol implements StompMessagingProtocol<Frame> {
                 Frame receiptFrame = new Frame("RECEIPT", receiptHeaders, "");
                 connections.send(connectionId, receiptFrame);
             }
-            terminate = true;
             connections.disconnect(connectionId);
+            terminate = true;
         }
     }    
 
@@ -193,11 +227,12 @@ public class StompProtocol implements StompMessagingProtocol<Frame> {
     }
 
     private Frame ProcessSend(Frame msg) {
-        if (!msg.getHeaders().containsKey("destination") || msg.getHeaders().size() != 1) {
+        if (!msg.getHeaders().containsKey("destination")) {
             HashMap<String, String> errorHeaders = new HashMap<>();
             errorHeaders.put("message", "Invalid or missing 'destination' header or more than one header in SEND frame");
             return new Frame("ERROR", errorHeaders, "");
         }
+
         return  msg;
     }
 
@@ -205,12 +240,6 @@ public class StompProtocol implements StompMessagingProtocol<Frame> {
         if (!msg.getHeaders().containsKey("destination")) {
             HashMap<String, String> errorHeaders = new HashMap<>();
             errorHeaders.put("message", "Missing 'destination' header in SUBSCRIBE frame");
-            return new Frame("ERROR", errorHeaders, "");
-        }
-    
-        if (!msg.getHeaders().containsKey("id")) {
-            HashMap<String, String> errorHeaders = new HashMap<>();
-            errorHeaders.put("message", "Missing 'id' header in SUBSCRIBE frame");
             return new Frame("ERROR", errorHeaders, "");
         }
     

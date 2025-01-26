@@ -53,10 +53,6 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
                         T nextMessage = encdec.decodeNextByte(buf.get());
                         if (nextMessage != null) {
                             protocol.process(nextMessage);
-                            if (protocol.shouldTerminate()) {
-                                close();
-                                return;
-                            }
                         }
                     }
                 } finally {
@@ -74,38 +70,12 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
 
     @Override
     public void close() {
-        if (isClosed()) return; 
-    
         try {
-            while (!writeQueue.isEmpty()) {
-                ByteBuffer top = writeQueue.peek();
-                chan.write(top);
-                if (!top.hasRemaining()) {
-                    writeQueue.poll();
-                }
-            }
-        } catch (IOException ex) {
-            
-        } finally {
-            try {
-                if (chan.isOpen()) {
-                    SelectionKey key = chan.keyFor(reactor.getSelector());
-                    if (key != null) {
-                        key.cancel();
-                    }
-                    chan.close();
-                }
+                chan.close();
             } catch (IOException ex) {
-                ex.printStackTrace();
-            }
+            ex.printStackTrace();
         }
     }
-    
-    
-    
-    
-    
-    
     
 
     public boolean isClosed() {
@@ -118,13 +88,9 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
     while (!writeQueue.isEmpty()) {
         try {
             ByteBuffer top = writeQueue.peek();
-            if (chan.isOpen()) {
-                chan.write(top);
-            } else {
-                return;
-            }
+            chan.write(top);
             if (!top.hasRemaining()) {
-                writeQueue.poll();
+                writeQueue.remove();
             } else {
                 return; 
             }
@@ -144,7 +110,6 @@ public class NonBlockingConnectionHandler<T> implements ConnectionHandler<T> {
     }
 }
 
-    
     
 
     private static ByteBuffer leaseBuffer() {
